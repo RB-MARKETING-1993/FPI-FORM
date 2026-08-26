@@ -1819,6 +1819,7 @@
             rec.reviewedBy = name;
             rec.reviewedAt = new Date().toISOString();
             await window.storage.set(id, JSON.stringify(rec), true);
+            await syncToSheets(rec); // append a "reviewed" row to the sheet mirror — keeps that log append-only, same as saves and corrections
             count++;
           }
         }catch(e){ console.error('Failed to mark reviewed', id, e); }
