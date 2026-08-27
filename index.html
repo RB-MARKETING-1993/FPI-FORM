@@ -29,8 +29,8 @@
   .fpi-panel{ background:var(--panel); border:1px solid var(--line); border-top:none; border-radius:0 0 10px 10px; padding:20px 22px 26px; }
   .fpi-fieldgrid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:12px; margin-bottom:22px; }
   .fpi-field label{ display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:#6b6f6a; margin-bottom:4px; }
-  .fpi-field input{ width:100%; padding:11px 10px; font-size:16px; border:1px solid var(--line-strong); border-radius:6px; background:#fff; }
-  .fpi-field input:focus{ outline:2px solid #7fb8a8; outline-offset:1px; }
+  .fpi-field input, .fpi-field select{ width:100%; padding:11px 10px; font-size:16px; border:1px solid var(--line-strong); border-radius:6px; background:#fff; }
+  .fpi-field input:focus, .fpi-field select:focus{ outline:2px solid #7fb8a8; outline-offset:1px; }
   .fpi-section-label{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--navy); margin:26px 0 10px; display:flex; align-items:center; gap:10px; }
   .fpi-section-label::after{ content:""; flex:1; height:1px; background:var(--line); }
   .fpi-tablewrap{ overflow-x:auto; -webkit-overflow-scrolling:touch; border:1px solid var(--line); border-radius:8px; }
@@ -101,7 +101,7 @@
   .fpi-chip{ display:flex; align-items:center; gap:6px; background:#f1f0eb; border:1px solid var(--line-strong); border-radius:14px; padding:4px 6px 4px 12px; font-size:12px; }
   .fpi-chip button{ background:var(--ng-bg); color:var(--ng); border:none; border-radius:50%; width:18px; height:18px; cursor:pointer; font-size:11px; line-height:1; }
   .fpi-bd-row{ display:flex; gap:8px; margin-bottom:6px; align-items:center; }
-  .fpi-bd-row input.fpi-bd-itemcode{ flex:1; padding:7px 9px; border:1px solid var(--line-strong); border-radius:6px; font-size:13px; }
+  .fpi-bd-row .fpi-bd-itemcode{ flex:1; padding:7px 9px; border:1px solid var(--line-strong); border-radius:6px; font-size:13px; }
   .fpi-bd-row input.fpi-bd-qty{ width:70px; padding:7px 9px; border:1px solid var(--line-strong); border-radius:6px; font-size:13px; }
   .fpi-bd-row button{ background:var(--ng-bg); color:var(--ng); border:none; border-radius:50%; width:26px; height:26px; cursor:pointer; font-size:13px; flex-shrink:0; }
   .fpi-mm-row{ display:flex; gap:8px; margin-bottom:6px; align-items:center; flex-wrap:wrap; }
@@ -122,6 +122,42 @@
   .fpi-dash-card .lbl{ font-size:10.5px; color:#7a7d78; text-transform:uppercase; letter-spacing:.06em; margin-top:4px; }
   .fpi-dash-card.warn .num{ color:var(--ng); }
   .fpi-dash-card.good .num{ color:var(--ok); }
+  .fpi-dash-card.clickable{ cursor:pointer; }
+  .fpi-dash-card.clickable:hover{ border-color:var(--line-strong); }
+
+  /* Searchable dropdown (combobox) — used for Item Code / Material / Colour / Pigment,
+     where a plain <select> becomes hard to scan once a list has 100+ values. */
+  .fpi-combo{ position:relative; }
+  .fpi-combo-input{ width:100%; }
+  .fpi-combo-list{ display:none; position:absolute; z-index:50; top:100%; left:0; right:0; max-height:220px;
+    overflow-y:auto; background:#fff; border:1px solid var(--line-strong); border-radius:6px; margin-top:2px;
+    box-shadow:0 4px 10px rgba(0,0,0,0.14); }
+  .fpi-combo-opt{ padding:9px 10px; font-size:14px; cursor:pointer; }
+  .fpi-combo-opt:hover, .fpi-combo-opt.active{ background:#eef5f2; }
+  .fpi-combo-empty{ padding:9px 10px; font-size:12px; color:#999; }
+
+  #fpi-rec-list{ overflow-x:auto; }
+
+  @media (max-width:600px){
+    .fpi-topbar{ padding:14px 14px 12px; }
+    .fpi-tabs{ padding:0 8px; overflow-x:auto; }
+    .fpi-tab{ padding:11px 10px; font-size:11.5px; white-space:nowrap; }
+    .fpi-panel{ padding:14px 12px 20px; }
+    .fpi-fieldgrid{ grid-template-columns:1fr; }
+    /* table-layout:fixed makes the column widths below actually stick — with the default
+       auto layout, a table sizes columns to fit its widest content regardless of any
+       min/max-width set on individual cells. */
+    table.fpi-grid{ min-width:0; width:100%; table-layout:fixed; font-size:11px; }
+    table.fpi-grid thead th{ font-size:8.5px; padding:4px 2px; white-space:normal; width:50px; }
+    table.fpi-grid thead th.fpi-sticky-h{ width:92px; }
+    td.fpi-namecell, th.fpi-sticky-h{ min-width:0; max-width:92px; width:92px; overflow-wrap:break-word; }
+    .fpi-itemname{ font-size:11px; }
+    .fpi-rowna{ font-size:9px; padding:4px 6px; min-height:0; margin-top:4px; }
+    .fpi-iteminstr{ display:none; }
+    td.fpi-samplecell{ min-width:0; max-width:50px; width:50px; padding:3px 2px; }
+    .fpi-measure-input{ width:48px; padding:6px 3px; }
+    .fpi-toggle{ width:42px; height:32px; font-size:9.5px; }
+  }
 </style>
 </head>
 <body>
@@ -159,15 +195,15 @@
     </label>
 
     <div class="fpi-fieldgrid">
-      <div class="fpi-field" id="fpi-field-itemcode"><label>Item Code *</label><input id="f_itemcode" list="fpi-itemcode-list" placeholder="select or type new"/><datalist id="fpi-itemcode-list"></datalist></div>
+      <div class="fpi-field" id="fpi-field-itemcode"><label>Item Code *</label><select id="f_itemcode"><option value="">Select item code…</option></select></div>
       <div class="fpi-field" id="fpi-field-mouldref" style="display:none;"><label>Mould / Job Reference *</label><input id="f_mouldref" placeholder="e.g. mould name or job no."/></div>
-      <div class="fpi-field"><label>Material</label><input id="f_material" list="fpi-material-list" placeholder="select or type new"/><datalist id="fpi-material-list"></datalist></div>
-      <div class="fpi-field"><label>Colour</label><input id="f_colour" list="fpi-colour-list" placeholder="select or type new"/><datalist id="fpi-colour-list"></datalist></div>
-      <div class="fpi-field"><label>Pigment Code</label><input id="f_pigmentcode" list="fpi-pigment-list" placeholder="select or type new"/><datalist id="fpi-pigment-list"></datalist></div>
+      <div class="fpi-field"><label>Material</label><select id="f_material"><option value="">Select material…</option></select></div>
+      <div class="fpi-field"><label>Colour</label><select id="f_colour"><option value="">Select colour…</option></select></div>
+      <div class="fpi-field"><label>Pigment Code</label><select id="f_pigmentcode"><option value="">Select pigment code…</option></select></div>
       <div class="fpi-field"><label id="fpi-pigmentpct-label">Pigment %</label><input id="f_pigmentpct" type="number" step="0.001" placeholder="e.g. 0.02"/></div>
       <div class="fpi-field"><label>Customer</label><input id="f_customer"/></div>
-      <div class="fpi-field"><label>Machine *</label><input id="f_machine"/></div>
-      <div class="fpi-field"><label>Cavity</label><input id="f_noscavity" type="number"/></div>
+      <div class="fpi-field"><label>Machine *</label><input id="f_machine" type="number" step="1" placeholder="e.g. 12"/></div>
+      <div class="fpi-field"><label>Cavity</label><input id="f_noscavity" type="number" step="1"/></div>
       <div class="fpi-field"><label>Mould Change Date</label><input id="f_moulddate" type="date"/></div>
       <div class="fpi-field"><label>Material BATCH / LOT No. (if available)</label><input id="f_batchlot" placeholder="optional"/></div>
     </div>
@@ -185,7 +221,7 @@
       <div class="fpi-recnote" style="margin-top:6px;">Percentages assume all rows use the same unit — mixing kg and pkt in one calculation won't give a meaningful %.</div>
     </div>
 
-    <div class="fpi-section-label">Shared across all cavities in this shot</div>
+    <div class="fpi-section-label" id="fpi-shared-label" style="display:none;">Shared across all cavities in this shot</div>
     <div id="fpi-runner-block"></div>
 
     <div class="fpi-section-label" id="fpi-breakdown-label" style="display:none;">Cavity Breakdown</div>
@@ -320,87 +356,167 @@
 
 <script>
 (function(){
-  // ---- Backend: Google Sheets via Apps Script, replacing local artifact storage ----
-  const BACKEND_URL = 'https://script.google.com/macros/s/AKfycby-CHPwyxwQJPLMRV2QaJ8ReiGxVf2z5B311YiyGf3TV6sygIcas29DEIzVpkB8q9Ez/exec';
-  // Must match APP_KEY in the Apps Script backend. Not real secrecy — it's visible in this
-  // page's source like the URL above — but it stops a bare "curl the deployment URL" attack;
-  // a caller now has to have actually read this page's JS.
-  const BACKEND_KEY = 'fb1839a5c431de3a88646c5860e1d8c24a37f5933043927b81cc26b93930';
+  // ---- Backend: Supabase (Postgres + auto-generated REST API) ----
+  const SUPABASE_URL = 'https://qhrnaasnebudpixcjnfi.supabase.co';
+  // Safe to expose — this is the "publishable" key. Access is controlled by Row Level
+  // Security policies on the database side, not by hiding this value.
+  const SUPABASE_KEY = 'sb_publishable_EP0wgrWR7aQWP2Mr05MkLQ_LXypw7Xt';
 
-  async function backendPost_(payload){
-    const res = await fetch(BACKEND_URL, {
-      method: 'POST', headers: {'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify(Object.assign({ appKey: BACKEND_KEY }, payload))
-    });
-    return res.json();
+  // Kept only for photo uploads to Google Drive — everything else has moved to Supabase.
+  const PHOTO_BACKEND_URL = 'https://script.google.com/macros/s/AKfycby-CHPwyxwQJPLMRV2QaJ8ReiGxVf2z5B311YiyGf3TV6sygIcas29DEIzVpkB8q9Ez/exec';
+  const PHOTO_BACKEND_KEY = 'fb1839a5c431de3a88646c5860e1d8c24a37f5933043927b81cc26b93930';
+
+  async function sbFetch_(path, opts){
+    const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, Object.assign({}, opts, {
+      headers: Object.assign({
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Content-Type': 'application/json'
+      }, (opts && opts.headers) || {})
+    }));
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : null;
+    if(!res.ok) throw new Error((data && data.message) || ('Supabase error ' + res.status));
+    return data;
   }
-  async function backendGetAction_(action, params){
-    const qs = new URLSearchParams(Object.assign({ action, appKey: BACKEND_KEY }, params||{})).toString();
-    const res = await fetch(BACKEND_URL + '?' + qs);
-    return res.json();
+  async function sbRpc_(fn, args){
+    return sbFetch_('rpc/' + fn, { method:'POST', body: JSON.stringify(args||{}) });
+  }
+
+  function recordToRow_(id, record){
+    return {
+      id, run_id: record.runId, submitted_at: record.submittedAt, inspected_at: record.inspectedAt || record.submittedAt,
+      mixed_mode: !!record.mixedMode, item_code: record.itemCode || null, mould_ref: record.mouldRef || null,
+      material: record.material || null, colour: record.colour || null, pigment_code: record.pigmentCode || null,
+      pigment_pct: record.pigmentPct || null, customer: record.customer || null, machine: record.machine || null,
+      nos_cavity: record.nosCavity || null, mould_change_date: record.mouldChangeDate || null,
+      batch_lot: record.batchLot || null, remarks: record.remarks || null, inspected_by: record.inspectedBy || null,
+      reviewed_by: record.reviewedBy || null, reviewed_at: record.reviewedAt || null,
+      overall_result: record.overallResult || null, data: record, updated_at: new Date().toISOString()
+    };
+  }
+  function auditToRow_(id, entry){
+    return {
+      id, deleted_at: entry.deletedAt, deleted_by: entry.deletedBy, reason: entry.reason,
+      batch_id: entry.batchId || null, record_id: entry.recordId || null, run_id: entry.runId || null,
+      label: entry.label || null, snapshot: entry
+    };
   }
 
   async function backendGet(key){
-    const data = await backendGetAction_('get', { key });
-    return { value: (data && data.value != null) ? data.value : null };
+    try{
+      if(key.startsWith('fpi:')){
+        const rows = await sbFetch_(`fpi_records?id=eq.${encodeURIComponent(key)}&select=data`);
+        return { value: rows && rows[0] ? JSON.stringify(rows[0].data) : null };
+      }
+      if(key.startsWith('audit:')){
+        const rows = await sbFetch_(`audit_log?id=eq.${encodeURIComponent(key)}&select=snapshot`);
+        return { value: rows && rows[0] ? JSON.stringify(rows[0].snapshot) : null };
+      }
+      if(key.startsWith('lists:')){
+        const rows = await sbFetch_(`dropdown_lists?list_key=eq.${encodeURIComponent(key)}&select=values`);
+        return { value: rows && rows[0] ? JSON.stringify(rows[0].values) : null };
+      }
+      const rows = await sbFetch_(`app_settings?key=eq.${encodeURIComponent(key)}&select=value`);
+      return { value: rows && rows[0] ? rows[0].value : null };
+    }catch(e){ console.error('backendGet failed', key, e); return { value: null }; }
   }
   async function backendSet(key, value){
-    const data = await backendPost_({ action:'set', key, value });
-    return !!(data && data.ok);
+    try{
+      if(key.startsWith('fpi:')){
+        const record = JSON.parse(value);
+        await sbFetch_('fpi_records', { method:'POST', headers:{'Prefer':'resolution=merge-duplicates,return=minimal'}, body: JSON.stringify(recordToRow_(key, record)) });
+        return true;
+      }
+      if(key.startsWith('audit:')){
+        const entry = JSON.parse(value);
+        await sbFetch_('audit_log', { method:'POST', headers:{'Prefer':'resolution=merge-duplicates,return=minimal'}, body: JSON.stringify(auditToRow_(key, entry)) });
+        return true;
+      }
+      if(key.startsWith('lists:')){
+        const values = JSON.parse(value);
+        await sbFetch_('dropdown_lists', { method:'POST', headers:{'Prefer':'resolution=merge-duplicates,return=minimal'}, body: JSON.stringify({ list_key:key, values }) });
+        return true;
+      }
+      await sbFetch_('app_settings', { method:'POST', headers:{'Prefer':'resolution=merge-duplicates,return=minimal'}, body: JSON.stringify({ key, value }) });
+      return true;
+    }catch(e){ console.error('backendSet failed', key, e); return false; }
   }
   async function backendDelete(key){
-    const data = await backendPost_({ action:'delete', key });
-    return !!(data && data.ok);
+    try{
+      const table = key.startsWith('fpi:') ? 'fpi_records' : key.startsWith('audit:') ? 'audit_log' : key.startsWith('lists:') ? 'dropdown_lists' : 'app_settings';
+      const col = table==='dropdown_lists' ? 'list_key' : table==='app_settings' ? 'key' : 'id';
+      await sbFetch_(`${table}?${col}=eq.${encodeURIComponent(key)}`, { method:'DELETE' });
+      return true;
+    }catch(e){ console.error('backendDelete failed', key, e); return false; }
   }
   async function backendList(prefix){
-    const data = await backendGetAction_('list', { prefix });
-    return { keys: (data && data.keys) ? data.keys : [] };
+    const items = await backendGetMany(prefix);
+    return { keys: Object.keys(items) };
   }
   // Fetches every key+value under a prefix in one round trip instead of a list call
   // followed by one get() per key — the difference between 1 request and 1+N requests.
   async function backendGetMany(prefix){
-    const data = await backendGetAction_('getMany', { prefix });
-    return (data && data.items) ? data.items : {};
+    try{
+      if(prefix==='fpi:'){
+        const rows = await sbFetch_('fpi_records?select=id,data');
+        const out = {}; rows.forEach(r=> out[r.id] = JSON.stringify(r.data)); return out;
+      }
+      if(prefix==='audit:'){
+        const rows = await sbFetch_('audit_log?select=id,snapshot');
+        const out = {}; rows.forEach(r=> out[r.id] = JSON.stringify(r.snapshot)); return out;
+      }
+      if(prefix==='lists:'){
+        const rows = await sbFetch_('dropdown_lists?select=list_key,values');
+        const out = {}; rows.forEach(r=> out[r.list_key] = JSON.stringify(r.values)); return out;
+      }
+      return {};
+    }catch(e){ console.error('backendGetMany failed', prefix, e); return {}; }
   }
   window.storage = { get: backendGet, set: backendSet, delete: backendDelete, list: backendList };
 
   async function uploadPhotoToDrive(dataUrl, filename){
-    const data = await backendPost_({ action:'uploadPhoto', dataUrl, filename });
+    const res = await fetch(PHOTO_BACKEND_URL, {
+      method: 'POST', headers: {'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ appKey: PHOTO_BACKEND_KEY, action:'uploadPhoto', dataUrl, filename })
+    });
+    const data = await res.json();
     if(!data || !data.url) throw new Error('upload failed');
     return data.url;
   }
 
-  // ---- PIN actions: the server hashes and verifies, raw PINs never round-trip ----
+  // ---- PIN actions: Postgres functions do the hashing/verifying — raw PINs never round-trip ----
   async function hasMasterPin(){
-    const data = await backendGetAction_('hasMasterPin');
-    return !!(data && data.set);
+    try{ return !!(await sbRpc_('has_master_pin')); }catch(e){ return false; }
   }
   async function setMasterPinRemote(pin){
-    const data = await backendPost_({ action:'setMasterPin', pin });
-    return !!(data && data.ok);
+    try{ await sbRpc_('set_master_pin', { p_pin: pin }); return true; }catch(e){ return false; }
   }
-  // Returns 'ok' | 'bad' | 'notset' | 'locked'. On 'locked', already toasts the wait time.
+  // Returns 'ok' | 'bad' | 'notset' | 'locked'.
   async function checkMasterPin(pin){
-    const data = await backendPost_({ action:'verifyMasterPin', pin });
-    if(data && data.locked){ toast(`Too many failed attempts — try again in ${data.retryAfterSeconds}s.`); return 'locked'; }
-    if(data && data.notSet) return 'notset';
-    return (data && data.ok) ? 'ok' : 'bad';
+    try{
+      const result = await sbRpc_('verify_master_pin', { p_pin: pin });
+      if(result === 'locked'){ toast('Too many failed attempts — try again in a few minutes.'); return 'locked'; }
+      if(result === 'notset') return 'notset';
+      return result === 'ok' ? 'ok' : 'bad';
+    }catch(e){ return 'bad'; }
   }
   async function listUserPinNames(){
-    const data = await backendGetAction_('listUserPinNames');
-    return (data && data.names) ? data.names : [];
+    try{ return (await sbRpc_('list_user_pin_names')) || []; }catch(e){ return []; }
   }
   async function addUserPinRemote(name, pin){
-    return backendPost_({ action:'addUserPin', name, pin });
+    try{ await sbRpc_('add_user_pin', { p_name:name, p_pin:pin }); return { ok:true }; }catch(e){ return { ok:false }; }
   }
   async function removeUserPinRemote(name){
-    return backendPost_({ action:'removeUserPin', name });
+    try{ await sbRpc_('remove_user_pin', { p_name:name }); return { ok:true }; }catch(e){ return { ok:false }; }
   }
   async function verifyUserPin(pin){
     if(!pin) return null;
-    const data = await backendPost_({ action:'verifyUserPin', pin });
-    if(data && data.locked){ toast(`Too many failed attempts — try again in ${data.retryAfterSeconds}s.`); return null; }
-    return (data && data.ok) ? data.name : null;
+    try{
+      const result = await sbRpc_('verify_user_pin', { p_pin: pin });
+      if(result === 'locked'){ toast('Too many failed attempts — try again in a few minutes.'); return null; }
+      return result || null;
+    }catch(e){ return null; }
   }
   // ---- end backend ----
 
@@ -459,32 +575,12 @@
       </div>`;
     const tbody = wrap.querySelector('tbody');
 
+    // Photo capture is disabled for now — kept as a no-op so the NG-state hooks elsewhere
+    // (which call this on every toggle) don't need to change.
     function renderPhotoControl(photoWrap, itemNo, sample, state){
       const key = blockKey+'-'+itemNo+'-'+sample;
-      if(state !== 'NG'){ photoWrap.innerHTML=''; delete photoStore[key]; return; }
-      const has = !!photoStore[key];
-      photoWrap.innerHTML = `<button type="button" class="fpi-photobtn ${has?'has':''}">${has?'📷 Photo added':'📷 Add photo'}</button>` +
-        (has ? `<img class="fpi-thumb" src="${photoStore[key]}"/>` : '');
-      photoWrap.querySelector('button').addEventListener('click', ()=>{
-        const input = document.createElement('input');
-        input.type = 'file'; input.accept = 'image/*'; input.capture = 'environment';
-        input.addEventListener('change', ()=>{
-          const file = input.files[0]; if(!file) return;
-          const reader = new FileReader();
-          reader.onload = async ()=>{
-            photoWrap.innerHTML = '<span style="font-size:11px;color:#7a7d78;">Uploading photo…</span>';
-            try{
-              photoStore[key] = await uploadPhotoToDrive(reader.result, key.replace(/[^a-z0-9]/gi,'_') + '.jpg');
-            }catch(e){
-              console.error('Photo upload failed', e);
-              toast('Photo upload failed — check your connection and try again.');
-            }
-            renderPhotoControl(photoWrap, itemNo, sample, 'NG');
-          };
-          reader.readAsDataURL(file);
-        });
-        input.click();
-      });
+      photoWrap.innerHTML = '';
+      delete photoStore[key];
     }
 
     ITEMS.forEach(item=>{
@@ -501,7 +597,7 @@
         const td = document.createElement('td');
         td.className = 'fpi-samplecell';
         if(item.type==='measure'){
-          td.innerHTML = `<input class="fpi-measure-input" data-item="${item.no}" data-sample="${s}" data-role="value" placeholder="value"/>`;
+          td.innerHTML = `<input class="fpi-measure-input" type="number" step="0.001" data-item="${item.no}" data-sample="${s}" data-role="value" placeholder="value"/>`;
         } else {
           td.innerHTML = `<button class="fpi-toggle" type="button" data-item="${item.no}" data-sample="${s}" data-state="">—</button>
             <div class="fpi-photowrap"></div>`;
@@ -510,6 +606,8 @@
       });
       tbody.appendChild(tr);
     });
+
+    wrap.querySelectorAll('.fpi-measure-input').forEach(inp=> enforceMaxDecimals_(inp, 3));
 
     // wire listeners now that elements exist
     wrap.querySelectorAll('.fpi-toggle').forEach(btn=>{
@@ -610,23 +708,46 @@
       const nameCell = document.createElement('td');
       nameCell.className = 'fpi-namecell';
       nameCell.innerHTML = `<span class="fpi-no">${item.no}</span><span class="fpi-itemname">${item.name}${item.unit?' ('+item.unit+')':''}</span><div class="fpi-iteminstr">${item.instrument}</div>`;
+      if(item.no === 1){
+        // Hot Runner lives right next to Runner Weight — this row is recreated fresh every
+        // reset, so the checkbox and its listener are (re)built here each time too.
+        const hrLabel = document.createElement('label');
+        hrLabel.style.cssText = 'display:flex; align-items:center; gap:5px; font-size:11px; font-weight:600; color:var(--navy); margin-top:5px; cursor:pointer;';
+        hrLabel.innerHTML = `<input type="checkbox" id="f_hotrunner"/> Hot Runner (= 0)`;
+        hrLabel.querySelector('#f_hotrunner').addEventListener('change', applyHotRunnerState);
+        nameCell.appendChild(hrLabel);
+      }
       tr.appendChild(nameCell);
       SAMPLES.forEach(s=>{
         const td = document.createElement('td');
         td.className = 'fpi-samplecell';
-        td.innerHTML = `<input class="fpi-measure-input" data-item="${item.no}" data-sample="${s}" data-role="value" placeholder="value"/>`;
+        td.innerHTML = `<input class="fpi-measure-input" type="number" step="0.001" data-item="${item.no}" data-sample="${s}" data-role="value" placeholder="value"/>`;
         tr.appendChild(td);
       });
       tbody.appendChild(tr);
     });
 
+    wrap.querySelectorAll('.fpi-measure-input').forEach(inp=> enforceMaxDecimals_(inp, 3));
+
     return wrap;
+  }
+  // Hot Runner: when checked, there's no runner weight to measure — lock all 5 samples to 0.
+  function applyHotRunnerState(){
+    const cb = document.getElementById('f_hotrunner');
+    const on = cb && cb.checked;
+    SAMPLES.forEach(s=>{
+      const inp = sharedWrap.querySelector(`.fpi-measure-input[data-item="1"][data-sample="${s}"]`);
+      if(!inp) return;
+      inp.disabled = on;
+      if(on) inp.value = '0';
+    });
   }
   function resetSharedBlock(){
     const container = document.getElementById('fpi-runner-block');
     container.innerHTML = '';
     sharedWrap = buildSharedBlock();
     container.appendChild(sharedWrap);
+    applyHotRunnerState();
   }
   function getSharedResults(){
     const out = {};
@@ -659,23 +780,32 @@
     const id = computeRunId();
     document.getElementById('fpi-runid-display').textContent = 'Run ID: ' + (id || (mixedMode ? '(fill Mould Ref + Machine)' : '(fill Item Code + Machine)'));
   }
-  ['f_itemcode','f_mouldref','f_machine'].forEach(id=>document.getElementById(id).addEventListener('input', refreshRunIdDisplay));
+  ['f_itemcode','f_mouldref','f_machine'].forEach(id=>{
+    const el = document.getElementById(id);
+    el.addEventListener('input', refreshRunIdDisplay);
+    el.addEventListener('change', refreshRunIdDisplay);
+  });
   refreshRunIdDisplay();
-  document.getElementById('f_itemcode').addEventListener('input', (e)=>{
+  document.getElementById('f_itemcode').addEventListener('change', (e)=>{
     if(!mixedMode && blocks.length && blocks[0].key==='main'){
       blocks[0].wrap.querySelector('.fpi-block-title').textContent = e.target.value.trim() || '(item code)';
     }
   });
+  enforceIntegerOnly_(document.getElementById('f_machine'));
+  enforceIntegerOnly_(document.getElementById('f_noscavity'));
 
   // growable dropdown lists (Item Code, Colour, Pigment Code) — stored shared so everyone sees the same options
   const SEED_ITEM_CODES = [];
   const SEED_MATERIALS = [];
   const DROPDOWN_LISTS = {
-    itemcode: { storeKey:'lists:item_codes', datalistId:'fpi-itemcode-list', seed:SEED_ITEM_CODES },
-    material: { storeKey:'lists:materials', datalistId:'fpi-material-list', seed:SEED_MATERIALS },
-    colour:   { storeKey:'lists:colours', datalistId:'fpi-colour-list', seed:[] },
-    pigment:  { storeKey:'lists:pigment_codes', datalistId:'fpi-pigment-list', seed:[] }
+    itemcode: { storeKey:'lists:item_codes', selectId:'f_itemcode', placeholder:'Select item code…', seed:SEED_ITEM_CODES },
+    material: { storeKey:'lists:materials', selectId:'f_material', placeholder:'Select material…', seed:SEED_MATERIALS },
+    colour:   { storeKey:'lists:colours', selectId:'f_colour', placeholder:'Select colour…', seed:[] },
+    pigment:  { storeKey:'lists:pigment_codes', selectId:'f_pigmentcode', placeholder:'Select pigment code…', seed:[] }
   };
+  // In-memory copy of each list, kept in sync by loadDropdownList/renderChips_ — used to
+  // populate <select> options in dynamically-created rows (material mix, cavity breakdown).
+  const listCache = { itemcode:[], material:[], colour:[], pigment:[] };
   async function loadDropdownList(key){
     const cfg = DROPDOWN_LISTS[key];
     let list = cfg.seed.slice();
@@ -683,24 +813,17 @@
       const r = await window.storage.get(cfg.storeKey, true);
       if(r && r.value) list = JSON.parse(r.value);
     }catch(e){ /* not saved yet, use seed */ }
-    const dl = document.getElementById(cfg.datalistId);
-    dl.innerHTML = list.map(v=>`<option value="${v.replace(/"/g,'&quot;')}"></option>`).join('');
+    listCache[key] = list;
+    const sel = document.getElementById(cfg.selectId);
+    if(sel) sel.innerHTML = buildOptionsHtml_(list, sel.value, cfg.placeholder);
     return list;
   }
-  async function addToDropdownList(key, value){
-    if(!value) return;
-    const cfg = DROPDOWN_LISTS[key];
-    const list = await loadDropdownList(key);
-    if(!list.includes(value)){
-      list.push(value);
-      try{ await window.storage.set(cfg.storeKey, JSON.stringify(list), true); }catch(e){ return; }
-      // Update the dropdown directly from the list we already have in memory —
-      // no need to re-fetch what we just wrote.
-      const dl = document.getElementById(cfg.datalistId);
-      dl.innerHTML = list.map(v=>`<option value="${v.replace(/"/g,'&quot;')}"></option>`).join('');
-    }
-  }
+  // Staff can only pick an existing value here — new values are added by an admin under
+  // Manage Lists, which is PIN-gated. This keeps the master list under deliberate control.
   loadDropdownList('itemcode'); loadDropdownList('material'); loadDropdownList('colour'); loadDropdownList('pigment');
+  // Plain <select> is hard to scan once a list has 100+ values — layer a type-to-filter
+  // search box on top of the header fields (the underlying <select> stays the source of truth).
+  ['f_itemcode','f_material','f_colour','f_pigmentcode'].forEach(id=> enhanceSelectSearch_(document.getElementById(id)));
 
   // Manage Lists tab — full CRUD over the four dropdown lists
   async function renderAllListManagers(){
@@ -711,8 +834,9 @@
   function renderChips_(container, cfg, key, list){
     const wrap = container.querySelector('.fpi-chipwrap');
     wrap.innerHTML = list.length ? list.map(v=>`<span class="fpi-chip">${escapeHtml(v)}<button type="button" data-removeval="${escapeHtml(v)}">×</button></span>`).join('') : '<span style="color:#999;font-size:12px;padding:6px;">No values yet.</span>';
-    const dl = document.getElementById(cfg.datalistId);
-    dl.innerHTML = list.map(v=>`<option value="${v.replace(/"/g,'&quot;')}"></option>`).join('');
+    listCache[key] = list;
+    const sel = document.getElementById(cfg.selectId);
+    if(sel) sel.innerHTML = buildOptionsHtml_(list, sel.value, cfg.placeholder);
     wrap.querySelectorAll('[data-removeval]').forEach(btn=>{
       btn.addEventListener('click', async ()=>{
         const updated = list.filter(v=>v!==btn.dataset.removeval);
@@ -789,6 +913,7 @@
     document.getElementById('fpi-field-mouldref').style.display = mixedMode ? '' : 'none';
     document.getElementById('fpi-breakdown-label').style.display = mixedMode ? '' : 'none';
     document.getElementById('fpi-breakdown-wrap').style.display = mixedMode ? '' : 'none';
+    document.getElementById('fpi-shared-label').style.display = mixedMode ? '' : 'none';
     clearForm();
     if(mixedMode){
       if(document.getElementById('fpi-breakdown-rows').children.length===0) addBreakdownRow();
@@ -820,7 +945,7 @@
     row.className = 'fpi-mm-row';
     row.innerHTML = `
       <span class="stamp" style="font-size:11px; color:#8a8d87; width:16px;">${idx}</span>
-      <input class="fpi-mm-material" list="fpi-material-list" placeholder="Material" value="${material?escapeHtml(material):''}"/>
+      <select class="fpi-mm-material">${buildOptionsHtml_(listCache.material, material||'', 'Material')}</select>
       <input class="fpi-mm-qty" type="number" step="0.1" placeholder="Qty" value="${qty||''}"/>
       <select class="fpi-mm-unit">
         <option value="kg" ${unit==='pkt'?'':'selected'}>kg</option>
@@ -834,9 +959,10 @@
     `;
     row.querySelector('.fpi-mm-qty').addEventListener('input', updateMaterialMixTotals);
     row.querySelector('.fpi-mm-unit').addEventListener('change', updateMaterialMixTotals);
-    row.querySelector('.fpi-mm-material').addEventListener('input', updateMaterialMixTotals);
+    row.querySelector('.fpi-mm-material').addEventListener('change', updateMaterialMixTotals);
     row.querySelector('.fpi-mm-pigmentbasis').addEventListener('change', updateMaterialMixTotals);
     row.querySelector('button').addEventListener('click', ()=>{ row.remove(); renumberMaterialMixRows(); updateMaterialMixTotals(); });
+    enhanceSelectSearch_(row.querySelector('.fpi-mm-material'), 'flex:2; min-width:160px;');
     rowsEl.appendChild(row);
     updateMaterialMixTotals();
   }
@@ -884,12 +1010,14 @@
     const row = document.createElement('div');
     row.className = 'fpi-bd-row';
     row.innerHTML = `
-      <input class="fpi-bd-itemcode" list="fpi-itemcode-list" placeholder="Item code" value="${itemCode?escapeHtml(itemCode):''}"/>
-      <input class="fpi-bd-qty" type="number" min="1" placeholder="Qty (cavities)" value="${qty||''}"/>
+      <select class="fpi-bd-itemcode">${buildOptionsHtml_(listCache.itemcode, itemCode||'', 'Item code')}</select>
+      <input class="fpi-bd-qty" type="number" step="1" min="1" placeholder="Qty (cavities)" value="${qty||''}"/>
       <button type="button" title="Remove">×</button>
     `;
-    row.querySelector('.fpi-bd-itemcode').addEventListener('input', updateBreakdownTotal);
+    row.querySelector('.fpi-bd-itemcode').addEventListener('change', updateBreakdownTotal);
     row.querySelector('.fpi-bd-qty').addEventListener('input', updateBreakdownTotal);
+    enforceIntegerOnly_(row.querySelector('.fpi-bd-qty'));
+    enhanceSelectSearch_(row.querySelector('.fpi-bd-itemcode'), 'flex:1;');
     row.querySelector('button').addEventListener('click', ()=>{ row.remove(); updateBreakdownTotal(); });
     rowsEl.appendChild(row);
     updateBreakdownTotal();
@@ -932,7 +1060,6 @@
       key: code, label: code, sub: `${merged[code]} cavit${merged[code]>1?'ies':'y'} — 5 samples checked`, qty: merged[code]
     }));
     setupBlocks(blockDefs);
-    for(const code of Object.keys(merged)) await addToDropdownList('itemcode', code);
     toast(`Generated ${blockDefs.length} checklist${blockDefs.length>1?'s':''} — 5 samples each, scroll down to fill them in.`);
   });
 
@@ -1065,6 +1192,7 @@
       reviewedBy: newReviewedBy, reviewedAt,
       overallResult: document.getElementById('fpi-overall-badge').textContent,
       sharedItems: sharedResults,
+      hotRunner: document.getElementById('f_hotrunner').checked,
       blocks: blockRecords,
       editHistory: window.__fpiEditingOriginal?.editHistory || []
     };
@@ -1167,22 +1295,10 @@
 
   async function commitSave(record){
     try{
+      // Item code / material / colour / pigment are picked from the existing list only —
+      // new values are added by an admin under Manage Lists, so there's nothing to register here.
       const res = await window.storage.set(record.id, JSON.stringify(record), true);
       if(!res){ toast('Save failed — please try again.'); return; }
-      // Each of these four lists is a separate key in the backend, so they're safe to update
-      // concurrently — only values going to the SAME list (e.g. multiple item codes in mixed
-      // mode) need to stay sequential, to avoid two concurrent writes racing on one list.
-      async function addManyToDropdownList(key, values){
-        for(const v of values) if(v) await addToDropdownList(key, v);
-      }
-      const itemCodes = record.mixedMode ? (record.blocks||[]).map(b=>b.itemCode) : [record.itemCode];
-      const materials = [record.material, ...((record.materialMix||[]).map(m=>m.material))];
-      await Promise.all([
-        addManyToDropdownList('itemcode', itemCodes),
-        addManyToDropdownList('material', materials),
-        record.colour ? addToDropdownList('colour', record.colour) : Promise.resolve(),
-        record.pigmentCode ? addToDropdownList('pigment', record.pigmentCode) : Promise.resolve()
-      ]);
     }catch(e){
       console.error(e); toast('Save error — check connection and try again.'); return;
     }
@@ -1229,13 +1345,14 @@
     document.getElementById('fpi-field-mouldref').style.display = mixedMode ? '' : 'none';
     document.getElementById('fpi-breakdown-label').style.display = mixedMode ? '' : 'none';
     document.getElementById('fpi-breakdown-wrap').style.display = mixedMode ? '' : 'none';
+    document.getElementById('fpi-shared-label').style.display = mixedMode ? '' : 'none';
 
     // header fields
-    document.getElementById('f_itemcode').value = record.itemCode || '';
+    setSelectValueSafe_('f_itemcode', record.itemCode || '');
     document.getElementById('f_mouldref').value = record.mouldRef || '';
-    document.getElementById('f_material').value = record.material || '';
-    document.getElementById('f_colour').value = record.colour || '';
-    document.getElementById('f_pigmentcode').value = record.pigmentCode || '';
+    setSelectValueSafe_('f_material', record.material || '');
+    setSelectValueSafe_('f_colour', record.colour || '');
+    setSelectValueSafe_('f_pigmentcode', record.pigmentCode || '');
     document.getElementById('f_pigmentpct').value = record.pigmentPct || '';
     mixedMaterialCheckbox.checked = !!record.isMixedMaterial;
     document.getElementById('fpi-mixedmaterial-fields').style.display = record.isMixedMaterial ? '' : 'none';
@@ -1296,6 +1413,7 @@
 
     // populate shared items
     resetSharedBlock();
+    document.getElementById('f_hotrunner').checked = !!record.hotRunner;
     if(record.sharedItems){
       Object.keys(record.sharedItems).forEach(no=>{
         const samples = record.sharedItems[no].samples;
@@ -1305,6 +1423,7 @@
         });
       });
     }
+    applyHotRunnerState();
 
     refreshRunIdDisplay();
     updateGlobalOverall();
@@ -1361,6 +1480,178 @@
 
   function escapeHtml(s){ return (s||'').toString().replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+  // Builds <option> markup for a strict select from a plain value list.
+  function buildOptionsHtml_(list, selected, placeholder){
+    const opts = [`<option value="">${escapeHtml(placeholder||'Select…')}</option>`];
+    (list||[]).forEach(v=> opts.push(`<option value="${escapeHtml(v)}" ${v===selected?'selected':''}>${escapeHtml(v)}</option>`));
+    return opts.join('');
+  }
+  // Sets a select's value even if it's not (yet) one of the loaded options — e.g. correcting an
+  // old record whose item code has since been removed from the admin list. Adds it as an extra
+  // option instead of silently blanking the field.
+  function setSelectValueSafe_(id, value){
+    const sel = document.getElementById(id);
+    if(!value){ sel.value=''; sel.dispatchEvent(new Event('change', {bubbles:true})); return; }
+    if(!Array.from(sel.options).some(o=>o.value===value)){
+      const opt = document.createElement('option');
+      opt.value = value; opt.textContent = value + ' (not in current list)';
+      sel.appendChild(opt);
+    }
+    sel.value = value;
+    sel.dispatchEvent(new Event('change', {bubbles:true}));
+  }
+  // Wraps a <select> with a filterable text input for large option lists (e.g. 500 item
+  // codes), while keeping the <select> itself as the real value holder — every other part of
+  // the app just reads/writes `.value` on it as before, unaware this exists.
+  function enhanceSelectSearch_(select, wrapperStyle){
+    if(!select || select.dataset.searchEnhanced) return;
+    select.dataset.searchEnhanced = '1';
+    const wrap = document.createElement('div');
+    wrap.className = 'fpi-combo';
+    if(wrapperStyle) wrap.style.cssText = wrapperStyle;
+    select.parentNode.insertBefore(wrap, select);
+    select.style.display = 'none';
+    wrap.appendChild(select);
+    const input = document.createElement('input');
+    input.type = 'text'; input.autocomplete = 'off'; input.className = 'fpi-combo-input';
+    const listEl = document.createElement('div');
+    listEl.className = 'fpi-combo-list';
+    wrap.appendChild(input);
+    wrap.appendChild(listEl);
+
+    function labelFor(value){
+      const opt = Array.from(select.options).find(o=>o.value===value);
+      return opt ? opt.textContent : '';
+    }
+    // Leave the box truly empty when nothing's picked yet — the placeholder attribute shows
+    // the hint text instead, so it disappears the moment you start typing (no manual delete needed).
+    function syncInput(){ input.value = select.value ? labelFor(select.value) : ''; }
+    syncInput();
+    input.placeholder = select.options[0] ? select.options[0].textContent : 'Select…';
+
+    function renderList(filter){
+      const q = (filter||'').trim().toLowerCase();
+      const opts = Array.from(select.options).filter(o=>o.value);
+      const matches = q ? opts.filter(o=>o.textContent.toLowerCase().includes(q)) : opts;
+      listEl.innerHTML = matches.length
+        ? matches.slice(0,200).map(o=>`<div class="fpi-combo-opt" data-value="${escapeHtml(o.value)}">${escapeHtml(o.textContent)}</div>`).join('')
+        : '<div class="fpi-combo-empty">No matches</div>';
+      listEl.style.display = 'block';
+    }
+    input.addEventListener('focus', ()=> renderList(''));
+    input.addEventListener('input', ()=> renderList(input.value));
+    listEl.addEventListener('mousedown', (e)=>{
+      const opt = e.target.closest('.fpi-combo-opt');
+      if(!opt) return;
+      e.preventDefault();
+      select.value = opt.dataset.value;
+      select.dispatchEvent(new Event('change', {bubbles:true}));
+      syncInput();
+      listEl.style.display = 'none';
+      input.blur();
+    });
+    input.addEventListener('blur', ()=>{
+      setTimeout(()=>{ listEl.style.display='none'; syncInput(); }, 150);
+    });
+    input.addEventListener('keydown', (e)=>{
+      if(e.key==='Escape'){ listEl.style.display='none'; syncInput(); input.blur(); }
+    });
+    select.addEventListener('change', syncInput);
+  }
+  // Trims typed input to at most `maxDecimals` decimal places as the user types.
+  function enforceMaxDecimals_(input, maxDecimals){
+    input.addEventListener('input', ()=>{
+      const v = input.value;
+      if(v.includes('.')){
+        const [intPart, decPart] = v.split('.');
+        if(decPart.length > maxDecimals) input.value = intPart + '.' + decPart.slice(0, maxDecimals);
+      }
+    });
+  }
+  // Strips any decimal point as the user types — for fields that must be whole numbers.
+  function enforceIntegerOnly_(input){
+    input.addEventListener('input', ()=>{
+      if(input.value.includes('.')) input.value = input.value.split('.')[0];
+    });
+  }
+  // Formats an ISO timestamp in the viewer's own local time (not UTC) for exports — a raw ISO
+  // string in a CSV shows UTC and can even land on the wrong calendar day for a Malaysia-time shift.
+  function formatLocalDateTime_(iso){
+    if(!iso) return '';
+    const d = new Date(iso);
+    if(isNaN(d)) return iso;
+    const pad = n=>String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+  // Compares two record snapshots and returns a human-readable list of what changed at
+  // one edit step, for the Edit history section — who/when/why already existed, this adds what.
+  const DIFF_FIELDS_ = [
+    ['itemCode','Item Code'], ['mouldRef','Mould/Job Ref'], ['material','Material'], ['colour','Colour'],
+    ['pigmentCode','Pigment Code'], ['pigmentPct','Pigment %'], ['customer','Customer'], ['machine','Machine'],
+    ['nosCavity','Cavity'], ['mouldChangeDate','Mould Change Date'], ['batchLot','Batch/Lot'], ['remarks','Remarks'],
+    ['overallResult','Overall Result'], ['hotRunner','Hot Runner']
+  ];
+  function diffRecordFields_(before, after){
+    const changes = [];
+    DIFF_FIELDS_.forEach(([key,label])=>{
+      const a = before ? before[key] : undefined;
+      const b = after ? after[key] : undefined;
+      const av = (a==null) ? '' : (typeof a==='boolean' ? (a?'Yes':'No') : String(a));
+      const bv = (b==null) ? '' : (typeof b==='boolean' ? (b?'Yes':'No') : String(b));
+      if(av !== bv) changes.push(`${label}: ${av||'(blank)'} → ${bv||'(blank)'}`);
+    });
+    const checklistDiff = diffChecklist_(before, after);
+    if(checklistDiff.count > 0){
+      changes.push(`Checklist: ${checklistDiff.count} value${checklistDiff.count===1?'':'s'} changed (${checklistDiff.names.join(', ')})`);
+    }
+    return changes;
+  }
+  // Flattens one record's checklist (all blocks + shared items, every sample) into a single
+  // key->value map, so two snapshots can be diffed cell-by-cell without walking nested arrays twice.
+  function flattenChecklist_(rec){
+    const out = {};
+    ((rec && rec.blocks) || []).forEach(blk=>{
+      (blk.results||[]).forEach(row=>{
+        SAMPLES.forEach(s=>{
+          const cell = row.samples ? row.samples[s] : null;
+          const val = cell ? (row.type==='measure' ? cell.value : cell.result) : '';
+          out[`${blk.itemCode}|${row.no}|${s}`] = val || '';
+        });
+      });
+    });
+    if(rec && rec.sharedItems){
+      Object.keys(rec.sharedItems).forEach(no=>{
+        const samples = rec.sharedItems[no].samples || {};
+        SAMPLES.forEach(s=> out[`shared|${no}|${s}`] = (samples[s]||{}).value || '');
+      });
+    }
+    return out;
+  }
+  // Minimal checklist diff for the edit history: a count and the list of check names touched —
+  // not a full before/after grid, which would be unreadable inline.
+  function diffChecklist_(before, after){
+    const a = flattenChecklist_(before), b = flattenChecklist_(after);
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+    let count = 0;
+    const names = new Set();
+    keys.forEach(k=>{
+      if((a[k]||'') !== (b[k]||'')){
+        count++;
+        const no = k.split('|')[1];
+        const item = ITEMS.find(i=>String(i.no)===no) || SHARED_ITEMS.find(i=>String(i.no)===no);
+        if(item) names.add(item.name);
+      }
+    });
+    return { count, names: Array.from(names) };
+  }
+  function formatLocalDate_(iso){
+    if(!iso) return '';
+    const d = new Date(iso);
+    if(isNaN(d)) return iso;
+    const pad = n=>String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  }
+
   function renderRecordsTable(records){
     const listEl = document.getElementById('fpi-rec-list');
     const table = document.createElement('table');
@@ -1391,7 +1682,7 @@
     table.appendChild(tb); listEl.innerHTML=''; listEl.appendChild(table);
   }
 
-  function openDetail(r, readonly){
+  function openDetail(r, readonly, bannerText){
     const backdrop = document.createElement('div');
     backdrop.className = 'fpi-modal-backdrop';
     const d = new Date(r.submittedAt);
@@ -1426,11 +1717,20 @@
     const editHistorySection = (r.editHistory && r.editHistory.length) ? `
       <div style="margin-top:14px; padding-top:10px; border-top:1px dashed var(--line-strong);">
         <div style="font-weight:700; font-size:12px; color:var(--amber); margin-bottom:6px;">Edit history (${r.editHistory.length})</div>
-        ${r.editHistory.map(h=>`<div style="font-size:11.5px; color:#7a7d78; margin-bottom:3px;">
-          ${new Date(h.editedAt).toLocaleString()} — ${escapeHtml(h.editedBy||'')}: ${escapeHtml(h.reason||'(no reason given)')}
-        </div>`).join('')}
+        ${r.editHistory.map((h,i)=>{
+          const after = r.editHistory[i+1] ? r.editHistory[i+1].previousSnapshot : r;
+          const changes = diffRecordFields_(h.previousSnapshot, after);
+          const changesHtml = changes.length
+            ? `<div style="margin-top:3px; padding-left:10px; color:#5b5e58;">${changes.map(c=>`• ${escapeHtml(c)}`).join('<br>')}</div>`
+            : `<div style="margin-top:3px; padding-left:10px; color:#aaa;">No field changes detected</div>`;
+          return `<div style="font-size:11.5px; color:#7a7d78; margin-bottom:8px;">
+            ${new Date(h.editedAt).toLocaleString()} — ${escapeHtml(h.editedBy||'')}: ${escapeHtml(h.reason||'(no reason given)')}
+            <button type="button" class="fpi-history-view-btn" data-history-index="${i}" style="margin-left:6px; font-size:10.5px; padding:2px 8px; border-radius:10px; border:1px solid var(--line-strong); background:#fff; color:#5b5e58; cursor:pointer; vertical-align:middle;">View old version</button>
+            ${changesHtml}
+          </div>`;
+        }).join('')}
       </div>` : '';
-    const archivedBanner = readonly ? `<div style="background:#f3f1fa; border:1px solid #8b7fc9; color:#6b5fa8; border-radius:6px; padding:8px 12px; font-size:11.5px; margin-bottom:10px;">This record has been deleted — showing an archived snapshot from the deletion log.</div>` : '';
+    const archivedBanner = readonly ? `<div style="background:#f3f1fa; border:1px solid #8b7fc9; color:#6b5fa8; border-radius:6px; padding:8px 12px; font-size:11.5px; margin-bottom:10px;">${escapeHtml(bannerText || 'This record has been deleted — showing an archived snapshot from the deletion log.')}</div>` : '';
     const headerGrid = `
       <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:8px 16px; background:#fbfaf7; border:1px solid var(--line); border-radius:8px; padding:12px 14px; margin-bottom:14px; font-size:12.5px;">
         <div><b style="display:block;font-size:10px;text-transform:uppercase;color:#8a8d87;letter-spacing:.05em;">Material</b>${escapeHtml(r.material)||'—'}</div>
@@ -1472,6 +1772,13 @@
     document.body.appendChild(backdrop);
     backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) backdrop.remove(); });
     backdrop.querySelector('#fpi-modal-close').addEventListener('click', ()=>backdrop.remove());
+    backdrop.querySelectorAll('.fpi-history-view-btn').forEach(btn=>{
+      btn.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        const h = r.editHistory[parseInt(btn.dataset.historyIndex)];
+        if(h && h.previousSnapshot) openDetail(h.previousSnapshot, true, 'Showing this record as it was before this correction was made — not the current version.');
+      });
+    });
     if(!readonly){
       backdrop.querySelector('#fpi-modal-edit').addEventListener('click', ()=>{
         backdrop.remove();
@@ -1503,7 +1810,7 @@
         });
       });
       (r.blocks||[]).forEach(blk=>{
-        const base = [r.submittedAt, r.runId, r.mixedMode?'mixed':'simple', blk.itemCode, r.mouldRef, r.material, r.colour, r.pigmentCode, r.pigmentPct, r.isMixedMaterial?'Y':'N', materialMixToString(r), r.customer, r.machine, r.nosCavity, r.mouldChangeDate, r.batchLot, blk.overallResult, r.overallResult, r.inspectedBy, r.reviewedBy, r.reviewedAt||'', r.remarks];
+        const base = [formatLocalDateTime_(r.submittedAt), r.runId, r.mixedMode?'mixed':'simple', blk.itemCode, r.mouldRef, r.material, r.colour, r.pigmentCode, r.pigmentPct, r.isMixedMaterial?'Y':'N', materialMixToString(r), r.customer, r.machine, r.nosCavity, r.mouldChangeDate, r.batchLot, blk.overallResult, r.overallResult, r.inspectedBy, r.reviewedBy, formatLocalDateTime_(r.reviewedAt), r.remarks];
         const vals = [];
         ITEMS.forEach(item=>{
           const row = blk.results.find(rr=>rr.no===item.no);
@@ -1532,7 +1839,7 @@
       (r.blocks||[]).forEach(blk=>{
         const weightRow = blk.results.find(x=>x.no===3);
         const vals = SAMPLES.map(s=>parseFloat(weightRow.samples[s].value)).filter(v=>!isNaN(v));
-        rows.push([r.submittedAt.slice(0,10), r.runId, blk.itemCode, avg(vals), runnerAvg, r.nosCavity, cycleAvg, r.material, r.colour, r.pigmentCode, r.pigmentPct, materialMixToString(r), r.machine, r.batchLot]);
+        rows.push([formatLocalDate_(r.submittedAt), r.runId, blk.itemCode, avg(vals), runnerAvg, r.nosCavity, cycleAvg, r.material, r.colour, r.pigmentCode, r.pigmentPct, materialMixToString(r), r.machine, r.batchLot]);
       });
     });
     const esc = v => `"${String(v==null?'':v).replace(/"/g,'""')}"`;
@@ -1668,15 +1975,15 @@
       });
       return {
         RecordKey: `${record.id}::${blk.itemCode}`,
-        RunID: record.runId, SubmittedAt: record.submittedAt, ItemCode: blk.itemCode,
+        RunID: record.runId, SubmittedAt: formatLocalDateTime_(record.submittedAt), ItemCode: blk.itemCode,
         Material: record.material, Colour: record.colour, PigmentCode: record.pigmentCode, PigmentPct: record.pigmentPct,
         MaterialMix: materialMixToString(record), Customer: record.customer, Machine: record.machine,
         Cavity: record.nosCavity, MouldChangeDate: record.mouldChangeDate, BatchLot: record.batchLot,
         PartWeight: avg(weightVals), RunnerWeight: runnerAvg, CycleTime: cycleAvg,
         OverallResult: blk.overallResult, NGCount: ngCount, HasPhoto: hasPhoto ? 'Yes' : 'No',
-        InspectedBy: record.inspectedBy, ReviewedBy: record.reviewedBy || '', ReviewedAt: record.reviewedAt || '',
+        InspectedBy: record.inspectedBy, ReviewedBy: record.reviewedBy || '', ReviewedAt: formatLocalDateTime_(record.reviewedAt),
         WasCorrected: correctionCount > 0 ? 'Yes' : 'No', CorrectionCount: correctionCount,
-        LastSyncedAt: new Date().toISOString()
+        LastSyncedAt: formatLocalDateTime_(new Date().toISOString())
       };
     });
   }
@@ -1755,6 +2062,8 @@
     });
   });
 
+  // Gates deletion behind the staff member's own personal PIN + a reason — verified
+  // server-side (see verifyUserPin above); identifies who deleted it for the audit trail.
   function showPinGate(title, message, onConfirm){
     const backdrop = document.createElement('div');
     backdrop.className = 'fpi-modal-backdrop';
@@ -1762,8 +2071,7 @@
       <h3 style="color:var(--ng);">${escapeHtml(title)}</h3>
       <div style="font-size:12.5px; color:#7a7d78; margin-bottom:12px;">${escapeHtml(message)}</div>
       <input type="password" id="fpi-gate-userpin" placeholder="Your personal PIN (required — identifies you for the audit trail)" style="width:100%; padding:9px 10px; border:1px solid var(--line-strong); border-radius:6px; font-size:14px; margin-bottom:8px;"/>
-      <input id="fpi-gate-reason" placeholder="Reason for deletion (required)" style="width:100%; padding:9px 10px; border:1px solid var(--line-strong); border-radius:6px; font-size:14px; margin-bottom:8px;"/>
-      <input type="password" id="fpi-gate-pin" placeholder="Master PIN" style="width:100%; padding:9px 10px; border:1px solid var(--line-strong); border-radius:6px; font-size:14px; margin-bottom:12px;"/>
+      <input id="fpi-gate-reason" placeholder="Reason for deletion (required)" style="width:100%; padding:9px 10px; border:1px solid var(--line-strong); border-radius:6px; font-size:14px; margin-bottom:12px;"/>
       <div style="display:flex; gap:10px; justify-content:flex-end;">
         <button type="button" class="fpi-btn ghost" id="fpi-gate-cancel">Cancel</button>
         <button type="button" class="fpi-btn danger-solid" id="fpi-gate-confirm" style="padding:10px 18px; border-radius:7px; font-weight:700; cursor:pointer;">Confirm</button>
@@ -1772,25 +2080,25 @@
     document.body.appendChild(backdrop);
     const userPinInput = backdrop.querySelector('#fpi-gate-userpin');
     const reasonInput = backdrop.querySelector('#fpi-gate-reason');
-    const pinInput = backdrop.querySelector('#fpi-gate-pin');
+    const confirmBtn = backdrop.querySelector('#fpi-gate-confirm');
+    const originalText = confirmBtn.textContent;
     userPinInput.focus();
     backdrop.querySelector('#fpi-gate-cancel').addEventListener('click', ()=>backdrop.remove());
     backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) backdrop.remove(); });
-    backdrop.querySelector('#fpi-gate-confirm').addEventListener('click', async ()=>{
+    confirmBtn.addEventListener('click', async ()=>{
       const reason = reasonInput.value.trim();
       if(!reason){ toast('A reason is required.'); return; }
       const matchedName = await verifyUserPin(userPinInput.value.trim());
       if(!matchedName){ toast('Invalid personal PIN — ask your supervisor to add you under Manage Lists > User PINs.'); return; }
-      const result = await checkMasterPin(pinInput.value);
-      if(result === 'notset'){ toast('No master PIN set yet — set one under Manage Lists > Security first.'); backdrop.remove(); return; }
-      if(result !== 'ok'){
-        if(result !== 'locked') toast('Incorrect master PIN.');
-        pinInput.value=''; pinInput.focus(); return;
+      confirmBtn.disabled = true; confirmBtn.textContent = 'Deleting…';
+      try{
+        await onConfirm({name: matchedName, reason});
+      } finally {
+        confirmBtn.disabled = false; confirmBtn.textContent = originalText;
       }
       backdrop.remove();
-      onConfirm({name: matchedName, reason});
     });
-    pinInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') backdrop.querySelector('#fpi-gate-confirm').click(); });
+    userPinInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') backdrop.querySelector('#fpi-gate-confirm').click(); });
   }
 
   async function logDeletion(snapshot, name, reason, batchId){
@@ -1809,36 +2117,37 @@
     document.querySelectorAll('.fpi-rec-select').forEach(cb=> cb.checked = e.target.checked);
   });
 
+  // Gates marking records as reviewed behind the staff member's own personal PIN — verified
+  // server-side (see verifyUserPin above), which also identifies who reviewed it.
   function showNamePrompt(title, message, onConfirm){
     const backdrop = document.createElement('div');
     backdrop.className = 'fpi-modal-backdrop';
     backdrop.innerHTML = `<div class="fpi-modal" style="max-width:360px;">
       <h3>${escapeHtml(title)}</h3>
       <div style="font-size:12.5px; color:#7a7d78; margin-bottom:12px;">${escapeHtml(message)}</div>
-      <input id="fpi-namegate-input" placeholder="Your name" style="width:100%; padding:9px 10px; border:1px solid var(--line-strong); border-radius:6px; font-size:14px; margin-bottom:8px;"/>
-      <input type="password" id="fpi-namegate-pin" placeholder="Master PIN" style="width:100%; padding:9px 10px; border:1px solid var(--line-strong); border-radius:6px; font-size:14px; margin-bottom:12px;"/>
+      <input type="password" id="fpi-namegate-pin" placeholder="Your personal PIN" style="width:100%; padding:9px 10px; border:1px solid var(--line-strong); border-radius:6px; font-size:14px; margin-bottom:12px;"/>
       <div style="display:flex; gap:10px; justify-content:flex-end;">
         <button type="button" class="fpi-btn ghost" id="fpi-namegate-cancel">Cancel</button>
         <button type="button" class="fpi-btn primary" id="fpi-namegate-confirm">Confirm</button>
       </div>
     </div>`;
     document.body.appendChild(backdrop);
-    const input = backdrop.querySelector('#fpi-namegate-input');
     const pinInput = backdrop.querySelector('#fpi-namegate-pin');
-    input.focus();
+    const confirmBtn = backdrop.querySelector('#fpi-namegate-confirm');
+    const originalText = confirmBtn.textContent;
+    pinInput.focus();
     backdrop.querySelector('#fpi-namegate-cancel').addEventListener('click', ()=>backdrop.remove());
     backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) backdrop.remove(); });
-    backdrop.querySelector('#fpi-namegate-confirm').addEventListener('click', async ()=>{
-      const name = input.value.trim();
-      if(!name){ toast('Name is required.'); return; }
-      const result = await checkMasterPin(pinInput.value);
-      if(result === 'notset'){ toast('No master PIN set yet — set one under Manage Lists > Security first.'); backdrop.remove(); return; }
-      if(result !== 'ok'){
-        if(result !== 'locked') toast('Incorrect master PIN.');
-        pinInput.value=''; pinInput.focus(); return;
+    confirmBtn.addEventListener('click', async ()=>{
+      const matchedName = await verifyUserPin(pinInput.value.trim());
+      if(!matchedName){ toast('Invalid personal PIN — ask your supervisor to add you under Manage Lists > User PINs.'); pinInput.value=''; pinInput.focus(); return; }
+      confirmBtn.disabled = true; confirmBtn.textContent = 'Reviewing…';
+      try{
+        await onConfirm(matchedName);
+      } finally {
+        confirmBtn.disabled = false; confirmBtn.textContent = originalText;
       }
       backdrop.remove();
-      onConfirm(name);
     });
     pinInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') backdrop.querySelector('#fpi-namegate-confirm').click(); });
   }
@@ -1846,7 +2155,7 @@
   document.getElementById('fpi-rec-batchreview').addEventListener('click', ()=>{
     const ids = Array.from(document.querySelectorAll('.fpi-rec-select:checked')).map(cb=>cb.dataset.id);
     if(!ids.length){ toast('Select at least one unreviewed record first.'); return; }
-    showNamePrompt('Mark as Reviewed', `Marking ${ids.length} record(s) as reviewed by you. Requires the master PIN.`, async (name)=>{
+    showNamePrompt('Mark as Reviewed', `Marking ${ids.length} record(s) as reviewed by you. Enter your personal PIN.`, async (name)=>{
       let count = 0;
       for(const id of ids){
         try{
@@ -2027,6 +2336,9 @@
     const machineStats = {};
     const defectCounts = {};
     const weightByItem = {};
+    const todayStr = formatLocalDate_(new Date().toISOString());
+    const loggedToday = records.filter(r=> formatLocalDate_(r.submittedAt) === todayStr).length;
+    const pendingReview = records.filter(r=> !r.reviewedBy).length;
     records.forEach(r=>{
       (r.blocks||[]).forEach(blk=>{
         totalBlocks++;
@@ -2054,7 +2366,9 @@
       });
     });
     Object.values(weightByItem).forEach(arr=> arr.sort((a,b)=> new Date(a.date)-new Date(b.date)));
-    return {totalBlocks, ngBlocks, machineStats, defectCounts, weightByItem};
+    const topDefectEntry = Object.entries(defectCounts).sort((a,b)=>b[1]-a[1])[0];
+    const topDefect = topDefectEntry ? `${topDefectEntry[0]} (${topDefectEntry[1]})` : '—';
+    return {totalBlocks, ngBlocks, machineStats, defectCounts, weightByItem, loggedToday, pendingReview, topDefect};
   }
 
   function renderDashCards(records, data){
@@ -2062,10 +2376,16 @@
     const cardsEl = document.getElementById('fpi-dash-cards');
     cardsEl.innerHTML = `
       <div class="fpi-dash-card"><div class="num">${records.length}</div><div class="lbl">Inspections Logged</div></div>
+      <div class="fpi-dash-card"><div class="num">${data.loggedToday}</div><div class="lbl">Lodged Today</div></div>
+      <div class="fpi-dash-card clickable ${data.pendingReview>0?'warn':'good'}" id="fpi-dash-pending-card" title="View in Records"><div class="num">${data.pendingReview}</div><div class="lbl">Pending Review</div></div>
       <div class="fpi-dash-card"><div class="num">${data.totalBlocks}</div><div class="lbl">Products Checked</div></div>
       <div class="fpi-dash-card ${passRate>=95?'good':(passRate<80?'warn':'')}"><div class="num">${passRate}%</div><div class="lbl">Overall Pass Rate</div></div>
       <div class="fpi-dash-card ${data.ngBlocks>0?'warn':'good'}"><div class="num">${data.ngBlocks}</div><div class="lbl">NG Products</div></div>
+      <div class="fpi-dash-card"><div class="num" style="font-size:16px;">${escapeHtml(data.topDefect)}</div><div class="lbl">Top Defect</div></div>
     `;
+    document.getElementById('fpi-dash-pending-card').addEventListener('click', ()=>{
+      document.querySelector('.fpi-tab[data-tab="records"]').click();
+    });
   }
 
   function renderWeightChart(data){
