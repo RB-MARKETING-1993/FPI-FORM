@@ -122,6 +122,42 @@
   .fpi-dash-card .lbl{ font-size:10.5px; color:#7a7d78; text-transform:uppercase; letter-spacing:.06em; margin-top:4px; }
   .fpi-dash-card.warn .num{ color:var(--ng); }
   .fpi-dash-card.good .num{ color:var(--ok); }
+  .fpi-dash-card.clickable{ cursor:pointer; }
+  .fpi-dash-card.clickable:hover{ border-color:var(--line-strong); }
+
+  /* Searchable dropdown (combobox) — used for Item Code / Material / Colour / Pigment,
+     where a plain <select> becomes hard to scan once a list has 100+ values. */
+  .fpi-combo{ position:relative; }
+  .fpi-combo-input{ width:100%; }
+  .fpi-combo-list{ display:none; position:absolute; z-index:50; top:100%; left:0; right:0; max-height:220px;
+    overflow-y:auto; background:#fff; border:1px solid var(--line-strong); border-radius:6px; margin-top:2px;
+    box-shadow:0 4px 10px rgba(0,0,0,0.14); }
+  .fpi-combo-opt{ padding:9px 10px; font-size:14px; cursor:pointer; }
+  .fpi-combo-opt:hover, .fpi-combo-opt.active{ background:#eef5f2; }
+  .fpi-combo-empty{ padding:9px 10px; font-size:12px; color:#999; }
+
+  #fpi-rec-list{ overflow-x:auto; }
+
+  @media (max-width:600px){
+    .fpi-topbar{ padding:14px 14px 12px; }
+    .fpi-tabs{ padding:0 8px; overflow-x:auto; }
+    .fpi-tab{ padding:11px 10px; font-size:11.5px; white-space:nowrap; }
+    .fpi-panel{ padding:14px 12px 20px; }
+    .fpi-fieldgrid{ grid-template-columns:1fr; }
+    /* table-layout:fixed makes the column widths below actually stick — with the default
+       auto layout, a table sizes columns to fit its widest content regardless of any
+       min/max-width set on individual cells. */
+    table.fpi-grid{ min-width:0; width:100%; table-layout:fixed; font-size:11px; }
+    table.fpi-grid thead th{ font-size:8.5px; padding:4px 2px; white-space:normal; width:50px; }
+    table.fpi-grid thead th.fpi-sticky-h{ width:92px; }
+    td.fpi-namecell, th.fpi-sticky-h{ min-width:0; max-width:92px; width:92px; overflow-wrap:break-word; }
+    .fpi-itemname{ font-size:11px; }
+    .fpi-rowna{ font-size:9px; padding:4px 6px; min-height:0; margin-top:4px; }
+    .fpi-iteminstr{ display:none; }
+    td.fpi-samplecell{ min-width:0; max-width:50px; width:50px; padding:3px 2px; }
+    .fpi-measure-input{ width:48px; padding:6px 3px; }
+    .fpi-toggle{ width:42px; height:32px; font-size:9.5px; }
+  }
 </style>
 </head>
 <body>
@@ -186,10 +222,6 @@
     </div>
 
     <div class="fpi-section-label" id="fpi-shared-label" style="display:none;">Shared across all cavities in this shot</div>
-    <label class="fpi-modebar" style="margin-bottom:10px;">
-      <input type="checkbox" id="f_hotrunner"/>
-      Hot Runner (no runner weight — automatically set to 0)
-    </label>
     <div id="fpi-runner-block"></div>
 
     <div class="fpi-section-label" id="fpi-breakdown-label" style="display:none;">Cavity Breakdown</div>
@@ -676,6 +708,15 @@
       const nameCell = document.createElement('td');
       nameCell.className = 'fpi-namecell';
       nameCell.innerHTML = `<span class="fpi-no">${item.no}</span><span class="fpi-itemname">${item.name}${item.unit?' ('+item.unit+')':''}</span><div class="fpi-iteminstr">${item.instrument}</div>`;
+      if(item.no === 1){
+        // Hot Runner lives right next to Runner Weight — this row is recreated fresh every
+        // reset, so the checkbox and its listener are (re)built here each time too.
+        const hrLabel = document.createElement('label');
+        hrLabel.style.cssText = 'display:flex; align-items:center; gap:5px; font-size:11px; font-weight:600; color:var(--navy); margin-top:5px; cursor:pointer;';
+        hrLabel.innerHTML = `<input type="checkbox" id="f_hotrunner"/> Hot Runner (= 0)`;
+        hrLabel.querySelector('#f_hotrunner').addEventListener('change', applyHotRunnerState);
+        nameCell.appendChild(hrLabel);
+      }
       tr.appendChild(nameCell);
       SAMPLES.forEach(s=>{
         const td = document.createElement('td');
@@ -692,7 +733,8 @@
   }
   // Hot Runner: when checked, there's no runner weight to measure — lock all 5 samples to 0.
   function applyHotRunnerState(){
-    const on = document.getElementById('f_hotrunner').checked;
+    const cb = document.getElementById('f_hotrunner');
+    const on = cb && cb.checked;
     SAMPLES.forEach(s=>{
       const inp = sharedWrap.querySelector(`.fpi-measure-input[data-item="1"][data-sample="${s}"]`);
       if(!inp) return;
@@ -700,7 +742,6 @@
       if(on) inp.value = '0';
     });
   }
-  document.getElementById('f_hotrunner').addEventListener('change', applyHotRunnerState);
   function resetSharedBlock(){
     const container = document.getElementById('fpi-runner-block');
     container.innerHTML = '';
@@ -780,6 +821,9 @@
   // Staff can only pick an existing value here — new values are added by an admin under
   // Manage Lists, which is PIN-gated. This keeps the master list under deliberate control.
   loadDropdownList('itemcode'); loadDropdownList('material'); loadDropdownList('colour'); loadDropdownList('pigment');
+  // Plain <select> is hard to scan once a list has 100+ values — layer a type-to-filter
+  // search box on top of the header fields (the underlying <select> stays the source of truth).
+  ['f_itemcode','f_material','f_colour','f_pigmentcode'].forEach(id=> enhanceSelectSearch_(document.getElementById(id)));
 
   // Manage Lists tab — full CRUD over the four dropdown lists
   async function renderAllListManagers(){
@@ -918,6 +962,7 @@
     row.querySelector('.fpi-mm-material').addEventListener('change', updateMaterialMixTotals);
     row.querySelector('.fpi-mm-pigmentbasis').addEventListener('change', updateMaterialMixTotals);
     row.querySelector('button').addEventListener('click', ()=>{ row.remove(); renumberMaterialMixRows(); updateMaterialMixTotals(); });
+    enhanceSelectSearch_(row.querySelector('.fpi-mm-material'), 'flex:2; min-width:160px;');
     rowsEl.appendChild(row);
     updateMaterialMixTotals();
   }
@@ -972,6 +1017,7 @@
     row.querySelector('.fpi-bd-itemcode').addEventListener('change', updateBreakdownTotal);
     row.querySelector('.fpi-bd-qty').addEventListener('input', updateBreakdownTotal);
     enforceIntegerOnly_(row.querySelector('.fpi-bd-qty'));
+    enhanceSelectSearch_(row.querySelector('.fpi-bd-itemcode'), 'flex:1;');
     row.querySelector('button').addEventListener('click', ()=>{ row.remove(); updateBreakdownTotal(); });
     rowsEl.appendChild(row);
     updateBreakdownTotal();
@@ -1032,7 +1078,6 @@
       if(mixedMode) addBreakdownRow();
     }
     Object.keys(photoStore).forEach(k=>delete photoStore[k]);
-    document.getElementById('f_hotrunner').checked = false;
     setupBlocks(mixedMode ? [] : [{key:'main', label:'', sub:''}]);
     resetSharedBlock();
     refreshRunIdDisplay();
@@ -1367,8 +1412,8 @@
     });
 
     // populate shared items
-    document.getElementById('f_hotrunner').checked = !!record.hotRunner;
     resetSharedBlock();
+    document.getElementById('f_hotrunner').checked = !!record.hotRunner;
     if(record.sharedItems){
       Object.keys(record.sharedItems).forEach(no=>{
         const samples = record.sharedItems[no].samples;
@@ -1446,13 +1491,70 @@
   // option instead of silently blanking the field.
   function setSelectValueSafe_(id, value){
     const sel = document.getElementById(id);
-    if(!value){ sel.value=''; return; }
+    if(!value){ sel.value=''; sel.dispatchEvent(new Event('change', {bubbles:true})); return; }
     if(!Array.from(sel.options).some(o=>o.value===value)){
       const opt = document.createElement('option');
       opt.value = value; opt.textContent = value + ' (not in current list)';
       sel.appendChild(opt);
     }
     sel.value = value;
+    sel.dispatchEvent(new Event('change', {bubbles:true}));
+  }
+  // Wraps a <select> with a filterable text input for large option lists (e.g. 500 item
+  // codes), while keeping the <select> itself as the real value holder — every other part of
+  // the app just reads/writes `.value` on it as before, unaware this exists.
+  function enhanceSelectSearch_(select, wrapperStyle){
+    if(!select || select.dataset.searchEnhanced) return;
+    select.dataset.searchEnhanced = '1';
+    const wrap = document.createElement('div');
+    wrap.className = 'fpi-combo';
+    if(wrapperStyle) wrap.style.cssText = wrapperStyle;
+    select.parentNode.insertBefore(wrap, select);
+    select.style.display = 'none';
+    wrap.appendChild(select);
+    const input = document.createElement('input');
+    input.type = 'text'; input.autocomplete = 'off'; input.className = 'fpi-combo-input';
+    const listEl = document.createElement('div');
+    listEl.className = 'fpi-combo-list';
+    wrap.appendChild(input);
+    wrap.appendChild(listEl);
+
+    function labelFor(value){
+      const opt = Array.from(select.options).find(o=>o.value===value);
+      return opt ? opt.textContent : '';
+    }
+    function syncInput(){ input.value = labelFor(select.value); }
+    syncInput();
+    input.placeholder = select.options[0] ? select.options[0].textContent : 'Select…';
+
+    function renderList(filter){
+      const q = (filter||'').trim().toLowerCase();
+      const opts = Array.from(select.options).filter(o=>o.value);
+      const matches = q ? opts.filter(o=>o.textContent.toLowerCase().includes(q)) : opts;
+      listEl.innerHTML = matches.length
+        ? matches.slice(0,200).map(o=>`<div class="fpi-combo-opt" data-value="${escapeHtml(o.value)}">${escapeHtml(o.textContent)}</div>`).join('')
+        : '<div class="fpi-combo-empty">No matches</div>';
+      listEl.style.display = 'block';
+    }
+    input.addEventListener('focus', ()=> renderList(''));
+    input.addEventListener('input', ()=> renderList(input.value));
+    listEl.addEventListener('mousedown', (e)=>{
+      const opt = e.target.closest('.fpi-combo-opt');
+      if(!opt) return;
+      e.preventDefault();
+      select.value = opt.dataset.value;
+      select.dispatchEvent(new Event('change', {bubbles:true}));
+      syncInput();
+      listEl.style.display = 'none';
+      input.blur();
+    });
+    input.addEventListener('blur', ()=>{
+      setTimeout(()=>{ listEl.style.display='none'; syncInput(); }, 150);
+    });
+    input.addEventListener('keydown', (e)=>{
+      if(e.key==='Escape'){ listEl.style.display='none'; syncInput(); input.blur(); }
+    });
+    select.addEventListener('change', syncInput);
   }
   // Trims typed input to at most `maxDecimals` decimal places as the user types.
   function enforceMaxDecimals_(input, maxDecimals){
@@ -1478,6 +1580,28 @@
     if(isNaN(d)) return iso;
     const pad = n=>String(n).padStart(2,'0');
     return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+  // Compares two record snapshots and returns a human-readable list of what changed at
+  // one edit step, for the Edit history section — who/when/why already existed, this adds what.
+  const DIFF_FIELDS_ = [
+    ['itemCode','Item Code'], ['mouldRef','Mould/Job Ref'], ['material','Material'], ['colour','Colour'],
+    ['pigmentCode','Pigment Code'], ['pigmentPct','Pigment %'], ['customer','Customer'], ['machine','Machine'],
+    ['nosCavity','Cavity'], ['mouldChangeDate','Mould Change Date'], ['batchLot','Batch/Lot'], ['remarks','Remarks'],
+    ['overallResult','Overall Result'], ['hotRunner','Hot Runner']
+  ];
+  function diffRecordFields_(before, after){
+    const changes = [];
+    DIFF_FIELDS_.forEach(([key,label])=>{
+      const a = before ? before[key] : undefined;
+      const b = after ? after[key] : undefined;
+      const av = (a==null) ? '' : (typeof a==='boolean' ? (a?'Yes':'No') : String(a));
+      const bv = (b==null) ? '' : (typeof b==='boolean' ? (b?'Yes':'No') : String(b));
+      if(av !== bv) changes.push(`${label}: ${av||'(blank)'} → ${bv||'(blank)'}`);
+    });
+    const beforeChecklist = JSON.stringify({blocks:before?before.blocks:null, sharedItems:before?before.sharedItems:null});
+    const afterChecklist = JSON.stringify({blocks:after?after.blocks:null, sharedItems:after?after.sharedItems:null});
+    if(beforeChecklist !== afterChecklist) changes.push('Checklist results changed');
+    return changes;
   }
   function formatLocalDate_(iso){
     if(!iso) return '';
@@ -1552,9 +1676,17 @@
     const editHistorySection = (r.editHistory && r.editHistory.length) ? `
       <div style="margin-top:14px; padding-top:10px; border-top:1px dashed var(--line-strong);">
         <div style="font-weight:700; font-size:12px; color:var(--amber); margin-bottom:6px;">Edit history (${r.editHistory.length})</div>
-        ${r.editHistory.map(h=>`<div style="font-size:11.5px; color:#7a7d78; margin-bottom:3px;">
-          ${new Date(h.editedAt).toLocaleString()} — ${escapeHtml(h.editedBy||'')}: ${escapeHtml(h.reason||'(no reason given)')}
-        </div>`).join('')}
+        ${r.editHistory.map((h,i)=>{
+          const after = r.editHistory[i+1] ? r.editHistory[i+1].previousSnapshot : r;
+          const changes = diffRecordFields_(h.previousSnapshot, after);
+          const changesHtml = changes.length
+            ? `<div style="margin-top:3px; padding-left:10px; color:#5b5e58;">${changes.map(c=>`• ${escapeHtml(c)}`).join('<br>')}</div>`
+            : `<div style="margin-top:3px; padding-left:10px; color:#aaa;">No field changes detected</div>`;
+          return `<div style="font-size:11.5px; color:#7a7d78; margin-bottom:8px;">
+            ${new Date(h.editedAt).toLocaleString()} — ${escapeHtml(h.editedBy||'')}: ${escapeHtml(h.reason||'(no reason given)')}
+            ${changesHtml}
+          </div>`;
+        }).join('')}
       </div>` : '';
     const archivedBanner = readonly ? `<div style="background:#f3f1fa; border:1px solid #8b7fc9; color:#6b5fa8; border-radius:6px; padding:8px 12px; font-size:11.5px; margin-bottom:10px;">This record has been deleted — showing an archived snapshot from the deletion log.</div>` : '';
     const headerGrid = `
@@ -2196,12 +2328,15 @@
     cardsEl.innerHTML = `
       <div class="fpi-dash-card"><div class="num">${records.length}</div><div class="lbl">Inspections Logged</div></div>
       <div class="fpi-dash-card"><div class="num">${data.loggedToday}</div><div class="lbl">Lodged Today</div></div>
-      <div class="fpi-dash-card ${data.pendingReview>0?'warn':'good'}"><div class="num">${data.pendingReview}</div><div class="lbl">Pending Review</div></div>
+      <div class="fpi-dash-card clickable ${data.pendingReview>0?'warn':'good'}" id="fpi-dash-pending-card" title="View in Records"><div class="num">${data.pendingReview}</div><div class="lbl">Pending Review</div></div>
       <div class="fpi-dash-card"><div class="num">${data.totalBlocks}</div><div class="lbl">Products Checked</div></div>
       <div class="fpi-dash-card ${passRate>=95?'good':(passRate<80?'warn':'')}"><div class="num">${passRate}%</div><div class="lbl">Overall Pass Rate</div></div>
       <div class="fpi-dash-card ${data.ngBlocks>0?'warn':'good'}"><div class="num">${data.ngBlocks}</div><div class="lbl">NG Products</div></div>
       <div class="fpi-dash-card"><div class="num" style="font-size:16px;">${escapeHtml(data.topDefect)}</div><div class="lbl">Top Defect</div></div>
     `;
+    document.getElementById('fpi-dash-pending-card').addEventListener('click', ()=>{
+      document.querySelector('.fpi-tab[data-tab="records"]').click();
+    });
   }
 
   function renderWeightChart(data){
