@@ -1523,7 +1523,9 @@
       const opt = Array.from(select.options).find(o=>o.value===value);
       return opt ? opt.textContent : '';
     }
-    function syncInput(){ input.value = labelFor(select.value); }
+    // Leave the box truly empty when nothing's picked yet — the placeholder attribute shows
+    // the hint text instead, so it disappears the moment you start typing (no manual delete needed).
+    function syncInput(){ input.value = select.value ? labelFor(select.value) : ''; }
     syncInput();
     input.placeholder = select.options[0] ? select.options[0].textContent : 'Select…';
 
@@ -1598,10 +1600,49 @@
       const bv = (b==null) ? '' : (typeof b==='boolean' ? (b?'Yes':'No') : String(b));
       if(av !== bv) changes.push(`${label}: ${av||'(blank)'} → ${bv||'(blank)'}`);
     });
-    const beforeChecklist = JSON.stringify({blocks:before?before.blocks:null, sharedItems:before?before.sharedItems:null});
-    const afterChecklist = JSON.stringify({blocks:after?after.blocks:null, sharedItems:after?after.sharedItems:null});
-    if(beforeChecklist !== afterChecklist) changes.push('Checklist results changed');
+    const checklistDiff = diffChecklist_(before, after);
+    if(checklistDiff.count > 0){
+      changes.push(`Checklist: ${checklistDiff.count} value${checklistDiff.count===1?'':'s'} changed (${checklistDiff.names.join(', ')})`);
+    }
     return changes;
+  }
+  // Flattens one record's checklist (all blocks + shared items, every sample) into a single
+  // key->value map, so two snapshots can be diffed cell-by-cell without walking nested arrays twice.
+  function flattenChecklist_(rec){
+    const out = {};
+    ((rec && rec.blocks) || []).forEach(blk=>{
+      (blk.results||[]).forEach(row=>{
+        SAMPLES.forEach(s=>{
+          const cell = row.samples ? row.samples[s] : null;
+          const val = cell ? (row.type==='measure' ? cell.value : cell.result) : '';
+          out[`${blk.itemCode}|${row.no}|${s}`] = val || '';
+        });
+      });
+    });
+    if(rec && rec.sharedItems){
+      Object.keys(rec.sharedItems).forEach(no=>{
+        const samples = rec.sharedItems[no].samples || {};
+        SAMPLES.forEach(s=> out[`shared|${no}|${s}`] = (samples[s]||{}).value || '');
+      });
+    }
+    return out;
+  }
+  // Minimal checklist diff for the edit history: a count and the list of check names touched —
+  // not a full before/after grid, which would be unreadable inline.
+  function diffChecklist_(before, after){
+    const a = flattenChecklist_(before), b = flattenChecklist_(after);
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+    let count = 0;
+    const names = new Set();
+    keys.forEach(k=>{
+      if((a[k]||'') !== (b[k]||'')){
+        count++;
+        const no = k.split('|')[1];
+        const item = ITEMS.find(i=>String(i.no)===no) || SHARED_ITEMS.find(i=>String(i.no)===no);
+        if(item) names.add(item.name);
+      }
+    });
+    return { count, names: Array.from(names) };
   }
   function formatLocalDate_(iso){
     if(!iso) return '';
