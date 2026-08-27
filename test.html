@@ -1682,7 +1682,7 @@
     table.appendChild(tb); listEl.innerHTML=''; listEl.appendChild(table);
   }
 
-  function openDetail(r, readonly){
+  function openDetail(r, readonly, bannerText){
     const backdrop = document.createElement('div');
     backdrop.className = 'fpi-modal-backdrop';
     const d = new Date(r.submittedAt);
@@ -1725,11 +1725,12 @@
             : `<div style="margin-top:3px; padding-left:10px; color:#aaa;">No field changes detected</div>`;
           return `<div style="font-size:11.5px; color:#7a7d78; margin-bottom:8px;">
             ${new Date(h.editedAt).toLocaleString()} — ${escapeHtml(h.editedBy||'')}: ${escapeHtml(h.reason||'(no reason given)')}
+            <button type="button" class="fpi-history-view-btn" data-history-index="${i}" style="margin-left:6px; font-size:10.5px; padding:2px 8px; border-radius:10px; border:1px solid var(--line-strong); background:#fff; color:#5b5e58; cursor:pointer; vertical-align:middle;">View old version</button>
             ${changesHtml}
           </div>`;
         }).join('')}
       </div>` : '';
-    const archivedBanner = readonly ? `<div style="background:#f3f1fa; border:1px solid #8b7fc9; color:#6b5fa8; border-radius:6px; padding:8px 12px; font-size:11.5px; margin-bottom:10px;">This record has been deleted — showing an archived snapshot from the deletion log.</div>` : '';
+    const archivedBanner = readonly ? `<div style="background:#f3f1fa; border:1px solid #8b7fc9; color:#6b5fa8; border-radius:6px; padding:8px 12px; font-size:11.5px; margin-bottom:10px;">${escapeHtml(bannerText || 'This record has been deleted — showing an archived snapshot from the deletion log.')}</div>` : '';
     const headerGrid = `
       <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:8px 16px; background:#fbfaf7; border:1px solid var(--line); border-radius:8px; padding:12px 14px; margin-bottom:14px; font-size:12.5px;">
         <div><b style="display:block;font-size:10px;text-transform:uppercase;color:#8a8d87;letter-spacing:.05em;">Material</b>${escapeHtml(r.material)||'—'}</div>
@@ -1771,6 +1772,13 @@
     document.body.appendChild(backdrop);
     backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) backdrop.remove(); });
     backdrop.querySelector('#fpi-modal-close').addEventListener('click', ()=>backdrop.remove());
+    backdrop.querySelectorAll('.fpi-history-view-btn').forEach(btn=>{
+      btn.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        const h = r.editHistory[parseInt(btn.dataset.historyIndex)];
+        if(h && h.previousSnapshot) openDetail(h.previousSnapshot, true, 'Showing this record as it was before this correction was made — not the current version.');
+      });
+    });
     if(!readonly){
       backdrop.querySelector('#fpi-modal-edit').addEventListener('click', ()=>{
         backdrop.remove();
