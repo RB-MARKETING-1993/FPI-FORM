@@ -356,6 +356,12 @@
     const data = await backendGetAction_('list', { prefix });
     return { keys: (data && data.keys) ? data.keys : [] };
   }
+  // Fetches every key+value under a prefix in one round trip instead of a list call
+  // followed by one get() per key — the difference between 1 request and 1+N requests.
+  async function backendGetMany(prefix){
+    const data = await backendGetAction_('getMany', { prefix });
+    return (data && data.items) ? data.items : {};
+  }
   window.storage = { get: backendGet, set: backendSet, delete: backendDelete, list: backendList };
 
   async function uploadPhotoToDrive(dataUrl, filename){
@@ -687,8 +693,11 @@
     const list = await loadDropdownList(key);
     if(!list.includes(value)){
       list.push(value);
-      try{ await window.storage.set(cfg.storeKey, JSON.stringify(list), true); }catch(e){}
-      await loadDropdownList(key);
+      try{ await window.storage.set(cfg.storeKey, JSON.stringify(list), true); }catch(e){ return; }
+      // Update the dropdown directly from the list we already have in memory —
+      // no need to re-fetch what we just wrote.
+      const dl = document.getElementById(cfg.datalistId);
+      dl.innerHTML = list.map(v=>`<option value="${v.replace(/"/g,'&quot;')}"></option>`).join('');
     }
   }
   loadDropdownList('itemcode'); loadDropdownList('material'); loadDropdownList('colour'); loadDropdownList('pigment');
@@ -696,6 +705,22 @@
   // Manage Lists tab — full CRUD over the four dropdown lists
   async function renderAllListManagers(){
     for(const key of Object.keys(DROPDOWN_LISTS)) await renderListManager(key);
+  }
+  // Renders the chip strip from an in-memory list — no network call. Called after every
+  // mutation using the list we already just wrote, instead of re-fetching what we know.
+  function renderChips_(container, cfg, key, list){
+    const wrap = container.querySelector('.fpi-chipwrap');
+    wrap.innerHTML = list.length ? list.map(v=>`<span class="fpi-chip">${escapeHtml(v)}<button type="button" data-removeval="${escapeHtml(v)}">×</button></span>`).join('') : '<span style="color:#999;font-size:12px;padding:6px;">No values yet.</span>';
+    const dl = document.getElementById(cfg.datalistId);
+    dl.innerHTML = list.map(v=>`<option value="${v.replace(/"/g,'&quot;')}"></option>`).join('');
+    wrap.querySelectorAll('[data-removeval]').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const updated = list.filter(v=>v!==btn.dataset.removeval);
+        try{ await window.storage.set(cfg.storeKey, JSON.stringify(updated), true); }catch(e){ toast('Could not remove.'); return; }
+        list.length = 0; list.push(...updated);
+        renderChips_(container, cfg, key, list);
+      });
+    });
   }
   async function renderListManager(key){
     const cfg = DROPDOWN_LISTS[key];
@@ -712,17 +737,22 @@
         <button type="button" class="fpi-btn ghost" data-importbtn="${key}" style="padding:8px 14px;font-size:12px;">Import CSV</button>
         <input type="file" accept=".csv,text/csv" data-importfile="${key}" style="display:none;"/>
       </div>
-      <div class="fpi-chipwrap">${list.length ? list.map(v=>`<span class="fpi-chip">${escapeHtml(v)}<button type="button" data-removeval="${escapeHtml(v)}" data-removekey="${key}">×</button></span>`).join('') : '<span style="color:#999;font-size:12px;padding:6px;">No values yet.</span>'}</div>
+      <div class="fpi-chipwrap"></div>
     `;
-    container.querySelector(`[data-addbtn="${key}"]`).addEventListener('click', async ()=>{
+    renderChips_(container, cfg, key, list);
+    const addBtn = container.querySelector(`[data-addbtn="${key}"]`);
+    addBtn.addEventListener('click', async ()=>{
       const inp = container.querySelector(`[data-addinput="${key}"]`);
       const val = inp.value.trim();
       if(!val) return;
-      const current = list.includes(val) ? list : list.concat([val]);
+      if(list.includes(val)){ inp.value = ''; toast('Already in the list.'); return; }
+      const current = list.concat([val]);
+      addBtn.disabled = true; addBtn.textContent = 'Adding…';
       try{ await window.storage.set(cfg.storeKey, JSON.stringify(current), true); }catch(e){ toast('Could not save.'); return; }
+      finally{ addBtn.disabled = false; addBtn.textContent = 'Add'; }
       inp.value = '';
-      await loadDropdownList(key);
-      await renderListManager(key);
+      list.length = 0; list.push(...current);
+      renderChips_(container, cfg, key, list);
       toast('Added to ' + key + ' list.');
     });
     const importBtn = container.querySelector(`[data-importbtn="${key}"]`);
@@ -743,19 +773,11 @@
         cleaned.forEach(v=>{ if(!merged.includes(v)){ merged.push(v); addedCount++; } });
         try{ await window.storage.set(cfg.storeKey, JSON.stringify(merged), true); }catch(e){ toast('Import failed to save.'); return; }
         importFile.value = '';
-        await loadDropdownList(key);
-        await renderListManager(key);
+        list.length = 0; list.push(...merged);
+        renderChips_(container, cfg, key, list);
         toast(`Imported ${addedCount} new value${addedCount===1?'':'s'} (${cleaned.length - addedCount} already existed, kept as-is).`);
       };
       reader.readAsText(file);
-    });
-    container.querySelectorAll('[data-removeval]').forEach(btn=>{
-      btn.addEventListener('click', async ()=>{
-        const updated = list.filter(v=>v!==btn.dataset.removeval);
-        try{ await window.storage.set(cfg.storeKey, JSON.stringify(updated), true); }catch(e){ toast('Could not remove.'); return; }
-        await loadDropdownList(key);
-        await renderListManager(key);
-      });
     });
   }
 
@@ -1129,7 +1151,17 @@
     backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) backdrop.remove(); });
     backdrop.querySelector('#fpi-review-confirm').addEventListener('click', async ()=>{
       backdrop.remove();
-      await commitSave(record);
+      // Immediate feedback — each backend call has real network latency, so without this
+      // the button just looks unresponsive for a couple of seconds after clicking.
+      const saveBtn = document.getElementById('fpi-submit');
+      const originalText = saveBtn.textContent;
+      saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
+      try{
+        await commitSave(record);
+      } finally {
+        saveBtn.disabled = false;
+        if(saveBtn.textContent === 'Saving…') saveBtn.textContent = originalText;
+      }
     });
   }
 
@@ -1137,15 +1169,20 @@
     try{
       const res = await window.storage.set(record.id, JSON.stringify(record), true);
       if(!res){ toast('Save failed — please try again.'); return; }
-      if(record.mixedMode){
-        for(const b of record.blocks) if(b.itemCode) await addToDropdownList('itemcode', b.itemCode);
-      } else {
-        await addToDropdownList('itemcode', record.itemCode);
+      // Each of these four lists is a separate key in the backend, so they're safe to update
+      // concurrently — only values going to the SAME list (e.g. multiple item codes in mixed
+      // mode) need to stay sequential, to avoid two concurrent writes racing on one list.
+      async function addManyToDropdownList(key, values){
+        for(const v of values) if(v) await addToDropdownList(key, v);
       }
-      if(record.material) await addToDropdownList('material', record.material);
-      if(record.materialMix) for(const m of record.materialMix) if(m.material) await addToDropdownList('material', m.material);
-      if(record.colour) await addToDropdownList('colour', record.colour);
-      if(record.pigmentCode) await addToDropdownList('pigment', record.pigmentCode);
+      const itemCodes = record.mixedMode ? (record.blocks||[]).map(b=>b.itemCode) : [record.itemCode];
+      const materials = [record.material, ...((record.materialMix||[]).map(m=>m.material))];
+      await Promise.all([
+        addManyToDropdownList('itemcode', itemCodes),
+        addManyToDropdownList('material', materials),
+        record.colour ? addToDropdownList('colour', record.colour) : Promise.resolve(),
+        record.pigmentCode ? addToDropdownList('pigment', record.pigmentCode) : Promise.resolve()
+      ]);
     }catch(e){
       console.error(e); toast('Save error — check connection and try again.'); return;
     }
@@ -1301,16 +1338,16 @@
     const listEl = document.getElementById('fpi-rec-list');
     listEl.innerHTML = '<div class="fpi-empty">Loading records…</div>';
     try{
-      const listing = await window.storage.list('fpi:', true);
-      const keys = (listing && listing.keys) ? listing.keys : [];
-      if(keys.length===0){
+      const items = await backendGetMany('fpi:');
+      const values = Object.values(items).filter(Boolean);
+      if(values.length===0){
         document.getElementById('fpi-rec-count').textContent = '';
         listEl.innerHTML = '<div class="fpi-empty">No inspections saved yet.</div>';
         cachedRecords = []; return;
       }
       const records = [];
-      for(const k of keys){
-        try{ const r = await window.storage.get(k, true); if(r && r.value) records.push(JSON.parse(r.value)); }catch(e){}
+      for(const v of values){
+        try{ records.push(JSON.parse(v)); }catch(e){}
       }
       records.sort((a,b)=> new Date(b.submittedAt) - new Date(a.submittedAt));
       cachedRecords = records;
@@ -1834,15 +1871,14 @@
     if(!cachedRecords.length){ toast('No records to clear.'); return; }
     showPinGate('Clear ALL records?', `This permanently deletes all ${cachedRecords.length} saved inspection records for everyone using this form. Each one is logged to the Deletion Log with a full snapshot before removal. This cannot be undone.`, async ({name, reason})=>{
       try{
-        const listing = await window.storage.list('fpi:', true);
-        const keys = (listing && listing.keys) ? listing.keys : [];
+        const items = await backendGetMany('fpi:');
+        const keys = Object.keys(items);
         const batchId = 'batch:' + Date.now();
         let count = 0;
         for(const k of keys){
           try{
-            const r = await window.storage.get(k, true);
-            if(r && r.value){
-              const snapshot = JSON.parse(r.value);
+            if(items[k]){
+              const snapshot = JSON.parse(items[k]);
               await logDeletion(snapshot, name, reason, batchId);
             }
             await window.storage.delete(k, true);
@@ -1874,10 +1910,9 @@
     try{
       const backup = { exportedAt: new Date().toISOString(), records: [], lists: {}, auditLog: [] };
 
-      const recListing = await window.storage.list('fpi:', true);
-      const recKeys = (recListing && recListing.keys) ? recListing.keys : [];
-      for(const k of recKeys){
-        try{ const r = await window.storage.get(k, true); if(r && r.value) backup.records.push(JSON.parse(r.value)); }catch(e){}
+      const recItems = await backendGetMany('fpi:');
+      for(const v of Object.values(recItems)){
+        if(v){ try{ backup.records.push(JSON.parse(v)); }catch(e){} }
       }
 
       for(const key of Object.keys(DROPDOWN_LISTS)){
@@ -1887,10 +1922,9 @@
         }catch(e){ backup.lists[key] = []; }
       }
 
-      const auditListing = await window.storage.list('audit:', true);
-      const auditKeys = (auditListing && auditListing.keys) ? auditListing.keys : [];
-      for(const k of auditKeys){
-        try{ const r = await window.storage.get(k, true); if(r && r.value) backup.auditLog.push(JSON.parse(r.value)); }catch(e){}
+      const auditItems = await backendGetMany('audit:');
+      for(const v of Object.values(auditItems)){
+        if(v){ try{ backup.auditLog.push(JSON.parse(v)); }catch(e){} }
       }
 
       await saveFile(`fpi_backup_${new Date().toISOString().slice(0,10)}.json`, 'application/json', JSON.stringify(backup, null, 2));
@@ -1947,15 +1981,15 @@
     const listEl = document.getElementById('fpi-auditlog-list');
     listEl.innerHTML = '<div class="fpi-empty">Loading deletion log…</div>';
     try{
-      const listing = await window.storage.list('audit:', true);
-      const keys = (listing && listing.keys) ? listing.keys : [];
-      if(keys.length===0){
+      const items = await backendGetMany('audit:');
+      const values = Object.values(items).filter(Boolean);
+      if(values.length===0){
         listEl.innerHTML = '<div class="fpi-empty">No deletions logged yet.</div>';
         cachedAuditLog = []; return;
       }
       const entries = [];
-      for(const k of keys){
-        try{ const r = await window.storage.get(k, true); if(r && r.value) entries.push(JSON.parse(r.value)); }catch(e){}
+      for(const v of values){
+        try{ entries.push(JSON.parse(v)); }catch(e){}
       }
       entries.sort((a,b)=> new Date(b.deletedAt) - new Date(a.deletedAt));
       cachedAuditLog = entries;
@@ -2066,20 +2100,16 @@
   async function computeStorageUsage(){
     let recordsBytes = 0, auditBytes = 0, listsBytes = 0, rowCount = 0;
     try{
-      const recListing = await window.storage.list('fpi:', true);
-      const recKeys = (recListing && recListing.keys) ? recListing.keys : [];
-      rowCount += recKeys.length;
-      for(const k of recKeys){
-        try{ const r = await window.storage.get(k, true); if(r && r.value) recordsBytes += byteSize(r.value); }catch(e){}
-      }
+      const recItems = await backendGetMany('fpi:');
+      const recValues = Object.values(recItems).filter(Boolean);
+      rowCount += recValues.length;
+      recValues.forEach(v=> recordsBytes += byteSize(v));
     }catch(e){}
     try{
-      const auditListing = await window.storage.list('audit:', true);
-      const auditKeys = (auditListing && auditListing.keys) ? auditListing.keys : [];
-      rowCount += auditKeys.length;
-      for(const k of auditKeys){
-        try{ const r = await window.storage.get(k, true); if(r && r.value) auditBytes += byteSize(r.value); }catch(e){}
-      }
+      const auditItems = await backendGetMany('audit:');
+      const auditValues = Object.values(auditItems).filter(Boolean);
+      rowCount += auditValues.length;
+      auditValues.forEach(v=> auditBytes += byteSize(v));
     }catch(e){}
     for(const key of Object.keys(DROPDOWN_LISTS)){
       try{
