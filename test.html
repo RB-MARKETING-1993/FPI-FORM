@@ -29,8 +29,8 @@
   .fpi-panel{ background:var(--panel); border:1px solid var(--line); border-top:none; border-radius:0 0 10px 10px; padding:20px 22px 26px; }
   .fpi-fieldgrid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:12px; margin-bottom:22px; }
   .fpi-field label{ display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:#6b6f6a; margin-bottom:4px; }
-  .fpi-field input{ width:100%; padding:11px 10px; font-size:16px; border:1px solid var(--line-strong); border-radius:6px; background:#fff; }
-  .fpi-field input:focus{ outline:2px solid #7fb8a8; outline-offset:1px; }
+  .fpi-field input, .fpi-field select{ width:100%; padding:11px 10px; font-size:16px; border:1px solid var(--line-strong); border-radius:6px; background:#fff; }
+  .fpi-field input:focus, .fpi-field select:focus{ outline:2px solid #7fb8a8; outline-offset:1px; }
   .fpi-section-label{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--navy); margin:26px 0 10px; display:flex; align-items:center; gap:10px; }
   .fpi-section-label::after{ content:""; flex:1; height:1px; background:var(--line); }
   .fpi-tablewrap{ overflow-x:auto; -webkit-overflow-scrolling:touch; border:1px solid var(--line); border-radius:8px; }
@@ -101,7 +101,7 @@
   .fpi-chip{ display:flex; align-items:center; gap:6px; background:#f1f0eb; border:1px solid var(--line-strong); border-radius:14px; padding:4px 6px 4px 12px; font-size:12px; }
   .fpi-chip button{ background:var(--ng-bg); color:var(--ng); border:none; border-radius:50%; width:18px; height:18px; cursor:pointer; font-size:11px; line-height:1; }
   .fpi-bd-row{ display:flex; gap:8px; margin-bottom:6px; align-items:center; }
-  .fpi-bd-row input.fpi-bd-itemcode{ flex:1; padding:7px 9px; border:1px solid var(--line-strong); border-radius:6px; font-size:13px; }
+  .fpi-bd-row .fpi-bd-itemcode{ flex:1; padding:7px 9px; border:1px solid var(--line-strong); border-radius:6px; font-size:13px; }
   .fpi-bd-row input.fpi-bd-qty{ width:70px; padding:7px 9px; border:1px solid var(--line-strong); border-radius:6px; font-size:13px; }
   .fpi-bd-row button{ background:var(--ng-bg); color:var(--ng); border:none; border-radius:50%; width:26px; height:26px; cursor:pointer; font-size:13px; flex-shrink:0; }
   .fpi-mm-row{ display:flex; gap:8px; margin-bottom:6px; align-items:center; flex-wrap:wrap; }
@@ -159,15 +159,15 @@
     </label>
 
     <div class="fpi-fieldgrid">
-      <div class="fpi-field" id="fpi-field-itemcode"><label>Item Code *</label><input id="f_itemcode" list="fpi-itemcode-list" placeholder="select or type new"/><datalist id="fpi-itemcode-list"></datalist></div>
+      <div class="fpi-field" id="fpi-field-itemcode"><label>Item Code *</label><select id="f_itemcode"><option value="">Select item code…</option></select></div>
       <div class="fpi-field" id="fpi-field-mouldref" style="display:none;"><label>Mould / Job Reference *</label><input id="f_mouldref" placeholder="e.g. mould name or job no."/></div>
-      <div class="fpi-field"><label>Material</label><input id="f_material" list="fpi-material-list" placeholder="select or type new"/><datalist id="fpi-material-list"></datalist></div>
-      <div class="fpi-field"><label>Colour</label><input id="f_colour" list="fpi-colour-list" placeholder="select or type new"/><datalist id="fpi-colour-list"></datalist></div>
-      <div class="fpi-field"><label>Pigment Code</label><input id="f_pigmentcode" list="fpi-pigment-list" placeholder="select or type new"/><datalist id="fpi-pigment-list"></datalist></div>
+      <div class="fpi-field"><label>Material</label><select id="f_material"><option value="">Select material…</option></select></div>
+      <div class="fpi-field"><label>Colour</label><select id="f_colour"><option value="">Select colour…</option></select></div>
+      <div class="fpi-field"><label>Pigment Code</label><select id="f_pigmentcode"><option value="">Select pigment code…</option></select></div>
       <div class="fpi-field"><label id="fpi-pigmentpct-label">Pigment %</label><input id="f_pigmentpct" type="number" step="0.001" placeholder="e.g. 0.02"/></div>
       <div class="fpi-field"><label>Customer</label><input id="f_customer"/></div>
-      <div class="fpi-field"><label>Machine *</label><input id="f_machine"/></div>
-      <div class="fpi-field"><label>Cavity</label><input id="f_noscavity" type="number"/></div>
+      <div class="fpi-field"><label>Machine *</label><input id="f_machine" type="number" step="1" placeholder="e.g. 12"/></div>
+      <div class="fpi-field"><label>Cavity</label><input id="f_noscavity" type="number" step="1"/></div>
       <div class="fpi-field"><label>Mould Change Date</label><input id="f_moulddate" type="date"/></div>
       <div class="fpi-field"><label>Material BATCH / LOT No. (if available)</label><input id="f_batchlot" placeholder="optional"/></div>
     </div>
@@ -185,7 +185,11 @@
       <div class="fpi-recnote" style="margin-top:6px;">Percentages assume all rows use the same unit — mixing kg and pkt in one calculation won't give a meaningful %.</div>
     </div>
 
-    <div class="fpi-section-label">Shared across all cavities in this shot</div>
+    <div class="fpi-section-label" id="fpi-shared-label" style="display:none;">Shared across all cavities in this shot</div>
+    <label class="fpi-modebar" style="margin-bottom:10px;">
+      <input type="checkbox" id="f_hotrunner"/>
+      Hot Runner (no runner weight — automatically set to 0)
+    </label>
     <div id="fpi-runner-block"></div>
 
     <div class="fpi-section-label" id="fpi-breakdown-label" style="display:none;">Cavity Breakdown</div>
@@ -539,32 +543,12 @@
       </div>`;
     const tbody = wrap.querySelector('tbody');
 
+    // Photo capture is disabled for now — kept as a no-op so the NG-state hooks elsewhere
+    // (which call this on every toggle) don't need to change.
     function renderPhotoControl(photoWrap, itemNo, sample, state){
       const key = blockKey+'-'+itemNo+'-'+sample;
-      if(state !== 'NG'){ photoWrap.innerHTML=''; delete photoStore[key]; return; }
-      const has = !!photoStore[key];
-      photoWrap.innerHTML = `<button type="button" class="fpi-photobtn ${has?'has':''}">${has?'📷 Photo added':'📷 Add photo'}</button>` +
-        (has ? `<img class="fpi-thumb" src="${photoStore[key]}"/>` : '');
-      photoWrap.querySelector('button').addEventListener('click', ()=>{
-        const input = document.createElement('input');
-        input.type = 'file'; input.accept = 'image/*'; input.capture = 'environment';
-        input.addEventListener('change', ()=>{
-          const file = input.files[0]; if(!file) return;
-          const reader = new FileReader();
-          reader.onload = async ()=>{
-            photoWrap.innerHTML = '<span style="font-size:11px;color:#7a7d78;">Uploading photo…</span>';
-            try{
-              photoStore[key] = await uploadPhotoToDrive(reader.result, key.replace(/[^a-z0-9]/gi,'_') + '.jpg');
-            }catch(e){
-              console.error('Photo upload failed', e);
-              toast('Photo upload failed — check your connection and try again.');
-            }
-            renderPhotoControl(photoWrap, itemNo, sample, 'NG');
-          };
-          reader.readAsDataURL(file);
-        });
-        input.click();
-      });
+      photoWrap.innerHTML = '';
+      delete photoStore[key];
     }
 
     ITEMS.forEach(item=>{
@@ -581,7 +565,7 @@
         const td = document.createElement('td');
         td.className = 'fpi-samplecell';
         if(item.type==='measure'){
-          td.innerHTML = `<input class="fpi-measure-input" data-item="${item.no}" data-sample="${s}" data-role="value" placeholder="value"/>`;
+          td.innerHTML = `<input class="fpi-measure-input" type="number" step="0.001" data-item="${item.no}" data-sample="${s}" data-role="value" placeholder="value"/>`;
         } else {
           td.innerHTML = `<button class="fpi-toggle" type="button" data-item="${item.no}" data-sample="${s}" data-state="">—</button>
             <div class="fpi-photowrap"></div>`;
@@ -590,6 +574,8 @@
       });
       tbody.appendChild(tr);
     });
+
+    wrap.querySelectorAll('.fpi-measure-input').forEach(inp=> enforceMaxDecimals_(inp, 3));
 
     // wire listeners now that elements exist
     wrap.querySelectorAll('.fpi-toggle').forEach(btn=>{
@@ -694,19 +680,33 @@
       SAMPLES.forEach(s=>{
         const td = document.createElement('td');
         td.className = 'fpi-samplecell';
-        td.innerHTML = `<input class="fpi-measure-input" data-item="${item.no}" data-sample="${s}" data-role="value" placeholder="value"/>`;
+        td.innerHTML = `<input class="fpi-measure-input" type="number" step="0.001" data-item="${item.no}" data-sample="${s}" data-role="value" placeholder="value"/>`;
         tr.appendChild(td);
       });
       tbody.appendChild(tr);
     });
 
+    wrap.querySelectorAll('.fpi-measure-input').forEach(inp=> enforceMaxDecimals_(inp, 3));
+
     return wrap;
   }
+  // Hot Runner: when checked, there's no runner weight to measure — lock all 5 samples to 0.
+  function applyHotRunnerState(){
+    const on = document.getElementById('f_hotrunner').checked;
+    SAMPLES.forEach(s=>{
+      const inp = sharedWrap.querySelector(`.fpi-measure-input[data-item="1"][data-sample="${s}"]`);
+      if(!inp) return;
+      inp.disabled = on;
+      if(on) inp.value = '0';
+    });
+  }
+  document.getElementById('f_hotrunner').addEventListener('change', applyHotRunnerState);
   function resetSharedBlock(){
     const container = document.getElementById('fpi-runner-block');
     container.innerHTML = '';
     sharedWrap = buildSharedBlock();
     container.appendChild(sharedWrap);
+    applyHotRunnerState();
   }
   function getSharedResults(){
     const out = {};
@@ -739,23 +739,32 @@
     const id = computeRunId();
     document.getElementById('fpi-runid-display').textContent = 'Run ID: ' + (id || (mixedMode ? '(fill Mould Ref + Machine)' : '(fill Item Code + Machine)'));
   }
-  ['f_itemcode','f_mouldref','f_machine'].forEach(id=>document.getElementById(id).addEventListener('input', refreshRunIdDisplay));
+  ['f_itemcode','f_mouldref','f_machine'].forEach(id=>{
+    const el = document.getElementById(id);
+    el.addEventListener('input', refreshRunIdDisplay);
+    el.addEventListener('change', refreshRunIdDisplay);
+  });
   refreshRunIdDisplay();
-  document.getElementById('f_itemcode').addEventListener('input', (e)=>{
+  document.getElementById('f_itemcode').addEventListener('change', (e)=>{
     if(!mixedMode && blocks.length && blocks[0].key==='main'){
       blocks[0].wrap.querySelector('.fpi-block-title').textContent = e.target.value.trim() || '(item code)';
     }
   });
+  enforceIntegerOnly_(document.getElementById('f_machine'));
+  enforceIntegerOnly_(document.getElementById('f_noscavity'));
 
   // growable dropdown lists (Item Code, Colour, Pigment Code) — stored shared so everyone sees the same options
   const SEED_ITEM_CODES = [];
   const SEED_MATERIALS = [];
   const DROPDOWN_LISTS = {
-    itemcode: { storeKey:'lists:item_codes', datalistId:'fpi-itemcode-list', seed:SEED_ITEM_CODES },
-    material: { storeKey:'lists:materials', datalistId:'fpi-material-list', seed:SEED_MATERIALS },
-    colour:   { storeKey:'lists:colours', datalistId:'fpi-colour-list', seed:[] },
-    pigment:  { storeKey:'lists:pigment_codes', datalistId:'fpi-pigment-list', seed:[] }
+    itemcode: { storeKey:'lists:item_codes', selectId:'f_itemcode', placeholder:'Select item code…', seed:SEED_ITEM_CODES },
+    material: { storeKey:'lists:materials', selectId:'f_material', placeholder:'Select material…', seed:SEED_MATERIALS },
+    colour:   { storeKey:'lists:colours', selectId:'f_colour', placeholder:'Select colour…', seed:[] },
+    pigment:  { storeKey:'lists:pigment_codes', selectId:'f_pigmentcode', placeholder:'Select pigment code…', seed:[] }
   };
+  // In-memory copy of each list, kept in sync by loadDropdownList/renderChips_ — used to
+  // populate <select> options in dynamically-created rows (material mix, cavity breakdown).
+  const listCache = { itemcode:[], material:[], colour:[], pigment:[] };
   async function loadDropdownList(key){
     const cfg = DROPDOWN_LISTS[key];
     let list = cfg.seed.slice();
@@ -763,23 +772,13 @@
       const r = await window.storage.get(cfg.storeKey, true);
       if(r && r.value) list = JSON.parse(r.value);
     }catch(e){ /* not saved yet, use seed */ }
-    const dl = document.getElementById(cfg.datalistId);
-    dl.innerHTML = list.map(v=>`<option value="${v.replace(/"/g,'&quot;')}"></option>`).join('');
+    listCache[key] = list;
+    const sel = document.getElementById(cfg.selectId);
+    if(sel) sel.innerHTML = buildOptionsHtml_(list, sel.value, cfg.placeholder);
     return list;
   }
-  async function addToDropdownList(key, value){
-    if(!value) return;
-    const cfg = DROPDOWN_LISTS[key];
-    const list = await loadDropdownList(key);
-    if(!list.includes(value)){
-      list.push(value);
-      try{ await window.storage.set(cfg.storeKey, JSON.stringify(list), true); }catch(e){ return; }
-      // Update the dropdown directly from the list we already have in memory —
-      // no need to re-fetch what we just wrote.
-      const dl = document.getElementById(cfg.datalistId);
-      dl.innerHTML = list.map(v=>`<option value="${v.replace(/"/g,'&quot;')}"></option>`).join('');
-    }
-  }
+  // Staff can only pick an existing value here — new values are added by an admin under
+  // Manage Lists, which is PIN-gated. This keeps the master list under deliberate control.
   loadDropdownList('itemcode'); loadDropdownList('material'); loadDropdownList('colour'); loadDropdownList('pigment');
 
   // Manage Lists tab — full CRUD over the four dropdown lists
@@ -791,8 +790,9 @@
   function renderChips_(container, cfg, key, list){
     const wrap = container.querySelector('.fpi-chipwrap');
     wrap.innerHTML = list.length ? list.map(v=>`<span class="fpi-chip">${escapeHtml(v)}<button type="button" data-removeval="${escapeHtml(v)}">×</button></span>`).join('') : '<span style="color:#999;font-size:12px;padding:6px;">No values yet.</span>';
-    const dl = document.getElementById(cfg.datalistId);
-    dl.innerHTML = list.map(v=>`<option value="${v.replace(/"/g,'&quot;')}"></option>`).join('');
+    listCache[key] = list;
+    const sel = document.getElementById(cfg.selectId);
+    if(sel) sel.innerHTML = buildOptionsHtml_(list, sel.value, cfg.placeholder);
     wrap.querySelectorAll('[data-removeval]').forEach(btn=>{
       btn.addEventListener('click', async ()=>{
         const updated = list.filter(v=>v!==btn.dataset.removeval);
@@ -869,6 +869,7 @@
     document.getElementById('fpi-field-mouldref').style.display = mixedMode ? '' : 'none';
     document.getElementById('fpi-breakdown-label').style.display = mixedMode ? '' : 'none';
     document.getElementById('fpi-breakdown-wrap').style.display = mixedMode ? '' : 'none';
+    document.getElementById('fpi-shared-label').style.display = mixedMode ? '' : 'none';
     clearForm();
     if(mixedMode){
       if(document.getElementById('fpi-breakdown-rows').children.length===0) addBreakdownRow();
@@ -900,7 +901,7 @@
     row.className = 'fpi-mm-row';
     row.innerHTML = `
       <span class="stamp" style="font-size:11px; color:#8a8d87; width:16px;">${idx}</span>
-      <input class="fpi-mm-material" list="fpi-material-list" placeholder="Material" value="${material?escapeHtml(material):''}"/>
+      <select class="fpi-mm-material">${buildOptionsHtml_(listCache.material, material||'', 'Material')}</select>
       <input class="fpi-mm-qty" type="number" step="0.1" placeholder="Qty" value="${qty||''}"/>
       <select class="fpi-mm-unit">
         <option value="kg" ${unit==='pkt'?'':'selected'}>kg</option>
@@ -914,7 +915,7 @@
     `;
     row.querySelector('.fpi-mm-qty').addEventListener('input', updateMaterialMixTotals);
     row.querySelector('.fpi-mm-unit').addEventListener('change', updateMaterialMixTotals);
-    row.querySelector('.fpi-mm-material').addEventListener('input', updateMaterialMixTotals);
+    row.querySelector('.fpi-mm-material').addEventListener('change', updateMaterialMixTotals);
     row.querySelector('.fpi-mm-pigmentbasis').addEventListener('change', updateMaterialMixTotals);
     row.querySelector('button').addEventListener('click', ()=>{ row.remove(); renumberMaterialMixRows(); updateMaterialMixTotals(); });
     rowsEl.appendChild(row);
@@ -964,12 +965,13 @@
     const row = document.createElement('div');
     row.className = 'fpi-bd-row';
     row.innerHTML = `
-      <input class="fpi-bd-itemcode" list="fpi-itemcode-list" placeholder="Item code" value="${itemCode?escapeHtml(itemCode):''}"/>
-      <input class="fpi-bd-qty" type="number" min="1" placeholder="Qty (cavities)" value="${qty||''}"/>
+      <select class="fpi-bd-itemcode">${buildOptionsHtml_(listCache.itemcode, itemCode||'', 'Item code')}</select>
+      <input class="fpi-bd-qty" type="number" step="1" min="1" placeholder="Qty (cavities)" value="${qty||''}"/>
       <button type="button" title="Remove">×</button>
     `;
-    row.querySelector('.fpi-bd-itemcode').addEventListener('input', updateBreakdownTotal);
+    row.querySelector('.fpi-bd-itemcode').addEventListener('change', updateBreakdownTotal);
     row.querySelector('.fpi-bd-qty').addEventListener('input', updateBreakdownTotal);
+    enforceIntegerOnly_(row.querySelector('.fpi-bd-qty'));
     row.querySelector('button').addEventListener('click', ()=>{ row.remove(); updateBreakdownTotal(); });
     rowsEl.appendChild(row);
     updateBreakdownTotal();
@@ -1012,7 +1014,6 @@
       key: code, label: code, sub: `${merged[code]} cavit${merged[code]>1?'ies':'y'} — 5 samples checked`, qty: merged[code]
     }));
     setupBlocks(blockDefs);
-    for(const code of Object.keys(merged)) await addToDropdownList('itemcode', code);
     toast(`Generated ${blockDefs.length} checklist${blockDefs.length>1?'s':''} — 5 samples each, scroll down to fill them in.`);
   });
 
@@ -1031,6 +1032,7 @@
       if(mixedMode) addBreakdownRow();
     }
     Object.keys(photoStore).forEach(k=>delete photoStore[k]);
+    document.getElementById('f_hotrunner').checked = false;
     setupBlocks(mixedMode ? [] : [{key:'main', label:'', sub:''}]);
     resetSharedBlock();
     refreshRunIdDisplay();
@@ -1145,6 +1147,7 @@
       reviewedBy: newReviewedBy, reviewedAt,
       overallResult: document.getElementById('fpi-overall-badge').textContent,
       sharedItems: sharedResults,
+      hotRunner: document.getElementById('f_hotrunner').checked,
       blocks: blockRecords,
       editHistory: window.__fpiEditingOriginal?.editHistory || []
     };
@@ -1247,22 +1250,10 @@
 
   async function commitSave(record){
     try{
+      // Item code / material / colour / pigment are picked from the existing list only —
+      // new values are added by an admin under Manage Lists, so there's nothing to register here.
       const res = await window.storage.set(record.id, JSON.stringify(record), true);
       if(!res){ toast('Save failed — please try again.'); return; }
-      // Each of these four lists is a separate key in the backend, so they're safe to update
-      // concurrently — only values going to the SAME list (e.g. multiple item codes in mixed
-      // mode) need to stay sequential, to avoid two concurrent writes racing on one list.
-      async function addManyToDropdownList(key, values){
-        for(const v of values) if(v) await addToDropdownList(key, v);
-      }
-      const itemCodes = record.mixedMode ? (record.blocks||[]).map(b=>b.itemCode) : [record.itemCode];
-      const materials = [record.material, ...((record.materialMix||[]).map(m=>m.material))];
-      await Promise.all([
-        addManyToDropdownList('itemcode', itemCodes),
-        addManyToDropdownList('material', materials),
-        record.colour ? addToDropdownList('colour', record.colour) : Promise.resolve(),
-        record.pigmentCode ? addToDropdownList('pigment', record.pigmentCode) : Promise.resolve()
-      ]);
     }catch(e){
       console.error(e); toast('Save error — check connection and try again.'); return;
     }
@@ -1309,13 +1300,14 @@
     document.getElementById('fpi-field-mouldref').style.display = mixedMode ? '' : 'none';
     document.getElementById('fpi-breakdown-label').style.display = mixedMode ? '' : 'none';
     document.getElementById('fpi-breakdown-wrap').style.display = mixedMode ? '' : 'none';
+    document.getElementById('fpi-shared-label').style.display = mixedMode ? '' : 'none';
 
     // header fields
-    document.getElementById('f_itemcode').value = record.itemCode || '';
+    setSelectValueSafe_('f_itemcode', record.itemCode || '');
     document.getElementById('f_mouldref').value = record.mouldRef || '';
-    document.getElementById('f_material').value = record.material || '';
-    document.getElementById('f_colour').value = record.colour || '';
-    document.getElementById('f_pigmentcode').value = record.pigmentCode || '';
+    setSelectValueSafe_('f_material', record.material || '');
+    setSelectValueSafe_('f_colour', record.colour || '');
+    setSelectValueSafe_('f_pigmentcode', record.pigmentCode || '');
     document.getElementById('f_pigmentpct').value = record.pigmentPct || '';
     mixedMaterialCheckbox.checked = !!record.isMixedMaterial;
     document.getElementById('fpi-mixedmaterial-fields').style.display = record.isMixedMaterial ? '' : 'none';
@@ -1375,6 +1367,7 @@
     });
 
     // populate shared items
+    document.getElementById('f_hotrunner').checked = !!record.hotRunner;
     resetSharedBlock();
     if(record.sharedItems){
       Object.keys(record.sharedItems).forEach(no=>{
@@ -1385,6 +1378,7 @@
         });
       });
     }
+    applyHotRunnerState();
 
     refreshRunIdDisplay();
     updateGlobalOverall();
@@ -1440,6 +1434,58 @@
   }
 
   function escapeHtml(s){ return (s||'').toString().replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  // Builds <option> markup for a strict select from a plain value list.
+  function buildOptionsHtml_(list, selected, placeholder){
+    const opts = [`<option value="">${escapeHtml(placeholder||'Select…')}</option>`];
+    (list||[]).forEach(v=> opts.push(`<option value="${escapeHtml(v)}" ${v===selected?'selected':''}>${escapeHtml(v)}</option>`));
+    return opts.join('');
+  }
+  // Sets a select's value even if it's not (yet) one of the loaded options — e.g. correcting an
+  // old record whose item code has since been removed from the admin list. Adds it as an extra
+  // option instead of silently blanking the field.
+  function setSelectValueSafe_(id, value){
+    const sel = document.getElementById(id);
+    if(!value){ sel.value=''; return; }
+    if(!Array.from(sel.options).some(o=>o.value===value)){
+      const opt = document.createElement('option');
+      opt.value = value; opt.textContent = value + ' (not in current list)';
+      sel.appendChild(opt);
+    }
+    sel.value = value;
+  }
+  // Trims typed input to at most `maxDecimals` decimal places as the user types.
+  function enforceMaxDecimals_(input, maxDecimals){
+    input.addEventListener('input', ()=>{
+      const v = input.value;
+      if(v.includes('.')){
+        const [intPart, decPart] = v.split('.');
+        if(decPart.length > maxDecimals) input.value = intPart + '.' + decPart.slice(0, maxDecimals);
+      }
+    });
+  }
+  // Strips any decimal point as the user types — for fields that must be whole numbers.
+  function enforceIntegerOnly_(input){
+    input.addEventListener('input', ()=>{
+      if(input.value.includes('.')) input.value = input.value.split('.')[0];
+    });
+  }
+  // Formats an ISO timestamp in the viewer's own local time (not UTC) for exports — a raw ISO
+  // string in a CSV shows UTC and can even land on the wrong calendar day for a Malaysia-time shift.
+  function formatLocalDateTime_(iso){
+    if(!iso) return '';
+    const d = new Date(iso);
+    if(isNaN(d)) return iso;
+    const pad = n=>String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+  function formatLocalDate_(iso){
+    if(!iso) return '';
+    const d = new Date(iso);
+    if(isNaN(d)) return iso;
+    const pad = n=>String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  }
 
   function renderRecordsTable(records){
     const listEl = document.getElementById('fpi-rec-list');
@@ -1583,7 +1629,7 @@
         });
       });
       (r.blocks||[]).forEach(blk=>{
-        const base = [r.submittedAt, r.runId, r.mixedMode?'mixed':'simple', blk.itemCode, r.mouldRef, r.material, r.colour, r.pigmentCode, r.pigmentPct, r.isMixedMaterial?'Y':'N', materialMixToString(r), r.customer, r.machine, r.nosCavity, r.mouldChangeDate, r.batchLot, blk.overallResult, r.overallResult, r.inspectedBy, r.reviewedBy, r.reviewedAt||'', r.remarks];
+        const base = [formatLocalDateTime_(r.submittedAt), r.runId, r.mixedMode?'mixed':'simple', blk.itemCode, r.mouldRef, r.material, r.colour, r.pigmentCode, r.pigmentPct, r.isMixedMaterial?'Y':'N', materialMixToString(r), r.customer, r.machine, r.nosCavity, r.mouldChangeDate, r.batchLot, blk.overallResult, r.overallResult, r.inspectedBy, r.reviewedBy, formatLocalDateTime_(r.reviewedAt), r.remarks];
         const vals = [];
         ITEMS.forEach(item=>{
           const row = blk.results.find(rr=>rr.no===item.no);
@@ -1612,7 +1658,7 @@
       (r.blocks||[]).forEach(blk=>{
         const weightRow = blk.results.find(x=>x.no===3);
         const vals = SAMPLES.map(s=>parseFloat(weightRow.samples[s].value)).filter(v=>!isNaN(v));
-        rows.push([r.submittedAt.slice(0,10), r.runId, blk.itemCode, avg(vals), runnerAvg, r.nosCavity, cycleAvg, r.material, r.colour, r.pigmentCode, r.pigmentPct, materialMixToString(r), r.machine, r.batchLot]);
+        rows.push([formatLocalDate_(r.submittedAt), r.runId, blk.itemCode, avg(vals), runnerAvg, r.nosCavity, cycleAvg, r.material, r.colour, r.pigmentCode, r.pigmentPct, materialMixToString(r), r.machine, r.batchLot]);
       });
     });
     const esc = v => `"${String(v==null?'':v).replace(/"/g,'""')}"`;
@@ -1748,15 +1794,15 @@
       });
       return {
         RecordKey: `${record.id}::${blk.itemCode}`,
-        RunID: record.runId, SubmittedAt: record.submittedAt, ItemCode: blk.itemCode,
+        RunID: record.runId, SubmittedAt: formatLocalDateTime_(record.submittedAt), ItemCode: blk.itemCode,
         Material: record.material, Colour: record.colour, PigmentCode: record.pigmentCode, PigmentPct: record.pigmentPct,
         MaterialMix: materialMixToString(record), Customer: record.customer, Machine: record.machine,
         Cavity: record.nosCavity, MouldChangeDate: record.mouldChangeDate, BatchLot: record.batchLot,
         PartWeight: avg(weightVals), RunnerWeight: runnerAvg, CycleTime: cycleAvg,
         OverallResult: blk.overallResult, NGCount: ngCount, HasPhoto: hasPhoto ? 'Yes' : 'No',
-        InspectedBy: record.inspectedBy, ReviewedBy: record.reviewedBy || '', ReviewedAt: record.reviewedAt || '',
+        InspectedBy: record.inspectedBy, ReviewedBy: record.reviewedBy || '', ReviewedAt: formatLocalDateTime_(record.reviewedAt),
         WasCorrected: correctionCount > 0 ? 'Yes' : 'No', CorrectionCount: correctionCount,
-        LastSyncedAt: new Date().toISOString()
+        LastSyncedAt: formatLocalDateTime_(new Date().toISOString())
       };
     });
   }
@@ -1835,6 +1881,8 @@
     });
   });
 
+  // Gates deletion behind the staff member's own personal PIN + a reason — verified
+  // server-side (see verifyUserPin above); identifies who deleted it for the audit trail.
   function showPinGate(title, message, onConfirm){
     const backdrop = document.createElement('div');
     backdrop.className = 'fpi-modal-backdrop';
@@ -1842,8 +1890,7 @@
       <h3 style="color:var(--ng);">${escapeHtml(title)}</h3>
       <div style="font-size:12.5px; color:#7a7d78; margin-bottom:12px;">${escapeHtml(message)}</div>
       <input type="password" id="fpi-gate-userpin" placeholder="Your personal PIN (required — identifies you for the audit trail)" style="width:100%; padding:9px 10px; border:1px solid var(--line-strong); border-radius:6px; font-size:14px; margin-bottom:8px;"/>
-      <input id="fpi-gate-reason" placeholder="Reason for deletion (required)" style="width:100%; padding:9px 10px; border:1px solid var(--line-strong); border-radius:6px; font-size:14px; margin-bottom:8px;"/>
-      <input type="password" id="fpi-gate-pin" placeholder="Master PIN" style="width:100%; padding:9px 10px; border:1px solid var(--line-strong); border-radius:6px; font-size:14px; margin-bottom:12px;"/>
+      <input id="fpi-gate-reason" placeholder="Reason for deletion (required)" style="width:100%; padding:9px 10px; border:1px solid var(--line-strong); border-radius:6px; font-size:14px; margin-bottom:12px;"/>
       <div style="display:flex; gap:10px; justify-content:flex-end;">
         <button type="button" class="fpi-btn ghost" id="fpi-gate-cancel">Cancel</button>
         <button type="button" class="fpi-btn danger-solid" id="fpi-gate-confirm" style="padding:10px 18px; border-radius:7px; font-weight:700; cursor:pointer;">Confirm</button>
@@ -1852,25 +1899,25 @@
     document.body.appendChild(backdrop);
     const userPinInput = backdrop.querySelector('#fpi-gate-userpin');
     const reasonInput = backdrop.querySelector('#fpi-gate-reason');
-    const pinInput = backdrop.querySelector('#fpi-gate-pin');
+    const confirmBtn = backdrop.querySelector('#fpi-gate-confirm');
+    const originalText = confirmBtn.textContent;
     userPinInput.focus();
     backdrop.querySelector('#fpi-gate-cancel').addEventListener('click', ()=>backdrop.remove());
     backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) backdrop.remove(); });
-    backdrop.querySelector('#fpi-gate-confirm').addEventListener('click', async ()=>{
+    confirmBtn.addEventListener('click', async ()=>{
       const reason = reasonInput.value.trim();
       if(!reason){ toast('A reason is required.'); return; }
       const matchedName = await verifyUserPin(userPinInput.value.trim());
       if(!matchedName){ toast('Invalid personal PIN — ask your supervisor to add you under Manage Lists > User PINs.'); return; }
-      const result = await checkMasterPin(pinInput.value);
-      if(result === 'notset'){ toast('No master PIN set yet — set one under Manage Lists > Security first.'); backdrop.remove(); return; }
-      if(result !== 'ok'){
-        if(result !== 'locked') toast('Incorrect master PIN.');
-        pinInput.value=''; pinInput.focus(); return;
+      confirmBtn.disabled = true; confirmBtn.textContent = 'Deleting…';
+      try{
+        await onConfirm({name: matchedName, reason});
+      } finally {
+        confirmBtn.disabled = false; confirmBtn.textContent = originalText;
       }
       backdrop.remove();
-      onConfirm({name: matchedName, reason});
     });
-    pinInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') backdrop.querySelector('#fpi-gate-confirm').click(); });
+    userPinInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') backdrop.querySelector('#fpi-gate-confirm').click(); });
   }
 
   async function logDeletion(snapshot, name, reason, batchId){
@@ -1889,36 +1936,37 @@
     document.querySelectorAll('.fpi-rec-select').forEach(cb=> cb.checked = e.target.checked);
   });
 
+  // Gates marking records as reviewed behind the staff member's own personal PIN — verified
+  // server-side (see verifyUserPin above), which also identifies who reviewed it.
   function showNamePrompt(title, message, onConfirm){
     const backdrop = document.createElement('div');
     backdrop.className = 'fpi-modal-backdrop';
     backdrop.innerHTML = `<div class="fpi-modal" style="max-width:360px;">
       <h3>${escapeHtml(title)}</h3>
       <div style="font-size:12.5px; color:#7a7d78; margin-bottom:12px;">${escapeHtml(message)}</div>
-      <input id="fpi-namegate-input" placeholder="Your name" style="width:100%; padding:9px 10px; border:1px solid var(--line-strong); border-radius:6px; font-size:14px; margin-bottom:8px;"/>
-      <input type="password" id="fpi-namegate-pin" placeholder="Master PIN" style="width:100%; padding:9px 10px; border:1px solid var(--line-strong); border-radius:6px; font-size:14px; margin-bottom:12px;"/>
+      <input type="password" id="fpi-namegate-pin" placeholder="Your personal PIN" style="width:100%; padding:9px 10px; border:1px solid var(--line-strong); border-radius:6px; font-size:14px; margin-bottom:12px;"/>
       <div style="display:flex; gap:10px; justify-content:flex-end;">
         <button type="button" class="fpi-btn ghost" id="fpi-namegate-cancel">Cancel</button>
         <button type="button" class="fpi-btn primary" id="fpi-namegate-confirm">Confirm</button>
       </div>
     </div>`;
     document.body.appendChild(backdrop);
-    const input = backdrop.querySelector('#fpi-namegate-input');
     const pinInput = backdrop.querySelector('#fpi-namegate-pin');
-    input.focus();
+    const confirmBtn = backdrop.querySelector('#fpi-namegate-confirm');
+    const originalText = confirmBtn.textContent;
+    pinInput.focus();
     backdrop.querySelector('#fpi-namegate-cancel').addEventListener('click', ()=>backdrop.remove());
     backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) backdrop.remove(); });
-    backdrop.querySelector('#fpi-namegate-confirm').addEventListener('click', async ()=>{
-      const name = input.value.trim();
-      if(!name){ toast('Name is required.'); return; }
-      const result = await checkMasterPin(pinInput.value);
-      if(result === 'notset'){ toast('No master PIN set yet — set one under Manage Lists > Security first.'); backdrop.remove(); return; }
-      if(result !== 'ok'){
-        if(result !== 'locked') toast('Incorrect master PIN.');
-        pinInput.value=''; pinInput.focus(); return;
+    confirmBtn.addEventListener('click', async ()=>{
+      const matchedName = await verifyUserPin(pinInput.value.trim());
+      if(!matchedName){ toast('Invalid personal PIN — ask your supervisor to add you under Manage Lists > User PINs.'); pinInput.value=''; pinInput.focus(); return; }
+      confirmBtn.disabled = true; confirmBtn.textContent = 'Reviewing…';
+      try{
+        await onConfirm(matchedName);
+      } finally {
+        confirmBtn.disabled = false; confirmBtn.textContent = originalText;
       }
       backdrop.remove();
-      onConfirm(name);
     });
     pinInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') backdrop.querySelector('#fpi-namegate-confirm').click(); });
   }
@@ -1926,7 +1974,7 @@
   document.getElementById('fpi-rec-batchreview').addEventListener('click', ()=>{
     const ids = Array.from(document.querySelectorAll('.fpi-rec-select:checked')).map(cb=>cb.dataset.id);
     if(!ids.length){ toast('Select at least one unreviewed record first.'); return; }
-    showNamePrompt('Mark as Reviewed', `Marking ${ids.length} record(s) as reviewed by you. Requires the master PIN.`, async (name)=>{
+    showNamePrompt('Mark as Reviewed', `Marking ${ids.length} record(s) as reviewed by you. Enter your personal PIN.`, async (name)=>{
       let count = 0;
       for(const id of ids){
         try{
@@ -2107,6 +2155,9 @@
     const machineStats = {};
     const defectCounts = {};
     const weightByItem = {};
+    const todayStr = formatLocalDate_(new Date().toISOString());
+    const loggedToday = records.filter(r=> formatLocalDate_(r.submittedAt) === todayStr).length;
+    const pendingReview = records.filter(r=> !r.reviewedBy).length;
     records.forEach(r=>{
       (r.blocks||[]).forEach(blk=>{
         totalBlocks++;
@@ -2134,7 +2185,9 @@
       });
     });
     Object.values(weightByItem).forEach(arr=> arr.sort((a,b)=> new Date(a.date)-new Date(b.date)));
-    return {totalBlocks, ngBlocks, machineStats, defectCounts, weightByItem};
+    const topDefectEntry = Object.entries(defectCounts).sort((a,b)=>b[1]-a[1])[0];
+    const topDefect = topDefectEntry ? `${topDefectEntry[0]} (${topDefectEntry[1]})` : '—';
+    return {totalBlocks, ngBlocks, machineStats, defectCounts, weightByItem, loggedToday, pendingReview, topDefect};
   }
 
   function renderDashCards(records, data){
@@ -2142,9 +2195,12 @@
     const cardsEl = document.getElementById('fpi-dash-cards');
     cardsEl.innerHTML = `
       <div class="fpi-dash-card"><div class="num">${records.length}</div><div class="lbl">Inspections Logged</div></div>
+      <div class="fpi-dash-card"><div class="num">${data.loggedToday}</div><div class="lbl">Lodged Today</div></div>
+      <div class="fpi-dash-card ${data.pendingReview>0?'warn':'good'}"><div class="num">${data.pendingReview}</div><div class="lbl">Pending Review</div></div>
       <div class="fpi-dash-card"><div class="num">${data.totalBlocks}</div><div class="lbl">Products Checked</div></div>
       <div class="fpi-dash-card ${passRate>=95?'good':(passRate<80?'warn':'')}"><div class="num">${passRate}%</div><div class="lbl">Overall Pass Rate</div></div>
       <div class="fpi-dash-card ${data.ngBlocks>0?'warn':'good'}"><div class="num">${data.ngBlocks}</div><div class="lbl">NG Products</div></div>
+      <div class="fpi-dash-card"><div class="num" style="font-size:16px;">${escapeHtml(data.topDefect)}</div><div class="lbl">Top Defect</div></div>
     `;
   }
 
