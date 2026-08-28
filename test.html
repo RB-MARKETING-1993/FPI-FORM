@@ -316,7 +316,10 @@
       </div>
     </div>
 
-    <div class="fpi-section-label">Run log</div>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin:26px 0 10px;">
+      <div class="fpi-section-label" style="margin:0; flex:1;">Run log</div>
+      <button type="button" class="fpi-btn ghost" id="ipi_export_btn" style="padding:6px 14px; font-size:12px;">Export CSV</button>
+    </div>
     <div id="ipi_log"></div>
   </div>
 
@@ -2165,7 +2168,7 @@
 
   // Gates marking records as reviewed behind the staff member's own personal PIN — verified
   // server-side (see verifyUserPin above), which also identifies who reviewed it.
-  function showNamePrompt(title, message, onConfirm){
+  function showNamePrompt(title, message, onConfirm, loadingLabel){
     const backdrop = document.createElement('div');
     backdrop.className = 'fpi-modal-backdrop';
     backdrop.innerHTML = `<div class="fpi-modal" style="max-width:360px;">
@@ -2187,7 +2190,7 @@
     confirmBtn.addEventListener('click', async ()=>{
       const matchedName = await verifyUserPin(pinInput.value.trim());
       if(!matchedName){ toast('Invalid personal PIN — ask your supervisor to add you under Manage Lists > User PINs.'); pinInput.value=''; pinInput.focus(); return; }
-      confirmBtn.disabled = true; confirmBtn.textContent = 'Reviewing…';
+      confirmBtn.disabled = true; confirmBtn.textContent = loadingLabel || 'Reviewing…';
       try{
         await onConfirm(matchedName);
       } finally {
@@ -2765,11 +2768,13 @@
     }
   }
 
+  let ipiLogRowsCache = [];
   async function ipiLoadLog(){
     const logEl = document.getElementById('ipi_log');
     logEl.innerHTML = '<div class="fpi-empty">Loading…</div>';
     try{
       const rows = await sbFetch_(`ipi_records?run_id=eq.${encodeURIComponent(ipiSelectedRun.run_id)}&select=id,checked_at,inspector,overall_result,data&order=checked_at.desc`);
+      ipiLogRowsCache = rows;
       if(!rows.length){
         logEl.innerHTML = '<div class="fpi-empty">No checkpoints logged for this run yet.</div>';
         ipiUpdateNudge(0);
@@ -2934,7 +2939,7 @@
       backdrop.remove();
       showNamePrompt('Log checkpoint', 'Enter your personal PIN to log this checkpoint under your name.', async (name)=>{
         await ipiSaveCheckpoint(name, checkpoint);
-      });
+      }, 'Confirming…');
     });
   }
 
@@ -2968,6 +2973,38 @@
       saveBtn.disabled = false; saveBtn.textContent = 'Log checkpoint';
     }
   }
+
+  // One CSV row per product checked per checkpoint — same "one row per block" shape as FPI's
+  // own Part Info export, so the two exports read consistently side by side.
+  function ipiToCsv(rows){
+    const header = ['Date','Time','RunID','ItemCode','CavitiesRunning','CavitiesOriginal','PartWeightAvg','RunnerWeightAvg','CycleTimeAvg','ProductResult','CheckpointResult','Inspector','Remarks'];
+    const avg = a => a.length ? (a.reduce((x,y)=>x+y,0)/a.length).toFixed(3) : '';
+    const out = [];
+    rows.forEach(r=>{
+      const d = r.data || {};
+      const runnerVals = SAMPLES.map(s=>parseFloat((d.sharedItems||{})[1]?.samples[s]?.value)).filter(v=>!isNaN(v));
+      const cycleVals = SAMPLES.map(s=>parseFloat((d.sharedItems||{})[2]?.samples[s]?.value)).filter(v=>!isNaN(v));
+      const runnerAvg = d.hotRunner ? 'hot runner' : avg(runnerVals);
+      const cycleAvg = avg(cycleVals);
+      (d.blocks||[]).forEach(blk=>{
+        const weightRow = blk.results.find(x=>x.no===3);
+        const weightVals = weightRow ? SAMPLES.map(s=>parseFloat(weightRow.samples[s].value)).filter(v=>!isNaN(v)) : [];
+        out.push([
+          formatLocalDate_(r.checked_at), new Date(r.checked_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}),
+          d.runId, blk.itemCode, blk.cavitiesRunning, blk.originalCavity,
+          avg(weightVals), runnerAvg, cycleAvg,
+          blk.overallResult, r.overall_result, r.inspector, d.remarks
+        ]);
+      });
+    });
+    const esc = v => `"${String(v==null?'':v).replace(/"/g,'""')}"`;
+    return [header.map(esc).join(','), ...out.map(row=>row.map(esc).join(','))].join('\r\n');
+  }
+  document.getElementById('ipi_export_btn').addEventListener('click', async ()=>{
+    if(!ipiLogRowsCache.length){ toast('No checkpoints to export for this run yet.'); return; }
+    const filenameSafe = (ipiSelectedRun.run_id || 'ipi_run').replace(/[^a-z0-9_-]+/gi, '_');
+    await saveFile(`ipi_${filenameSafe}.csv`, 'text/csv;charset=utf-8;', ipiToCsv(ipiLogRowsCache));
+  });
 })();
 </script>
 </body>
