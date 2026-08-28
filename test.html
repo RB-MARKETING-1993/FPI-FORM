@@ -2797,18 +2797,88 @@
           const cavFlags = (r.data && r.data.blocks || []).filter(b=> b.originalCavity && String(b.cavitiesRunning)!==String(b.originalCavity))
             .map(b=> `${escapeHtml(b.itemCode)} ${escapeHtml(b.cavitiesRunning)}/${escapeHtml(b.originalCavity)}`);
           const cavityFlag = cavFlags.length ? ` <span style="color:var(--amber); font-weight:700;">⚠ ${cavFlags.join(', ')} cav</span>` : '';
-          return `<div style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font-size:12.5px; margin-bottom:6px;">
+          return `<div data-rowid="${escapeHtml(r.id)}" style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font-size:12.5px; margin-bottom:6px; cursor:pointer;">
             <span>${escapeHtml(time)} · ${escapeHtml(r.inspector||'—')}${product}${cavityFlag}</span>
             <span style="font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px; background:${bg}; color:${col};">${escapeHtml(r.overall_result||'—')}</span>
           </div>`;
         }).join('');
         return `<div style="font-size:11.5px; color:#7a7d78; margin:10px 0 4px;">${escapeHtml(day)}${day===todayStr?' (today)':''}</div>${items}`;
       }).join('');
+      logEl.querySelectorAll('[data-rowid]').forEach(el=>{
+        el.addEventListener('mouseenter', ()=> el.style.background='#fbfaf7');
+        el.addEventListener('mouseleave', ()=> el.style.background='');
+        el.addEventListener('click', ()=>{
+          const row = ipiLogRowsCache.find(x=>x.id===el.dataset.rowid);
+          if(row) ipiOpenDetail(row);
+        });
+      });
       ipiUpdateNudge(groups[todayStr] ? groups[todayStr].length : 0);
     }catch(e){
       console.error(e);
       logEl.innerHTML = '<div class="fpi-empty">Could not load the run log.</div>';
     }
+  }
+
+  // Full detail view for one logged checkpoint — same modal shape as FPI's own openDetail, so a
+  // checkpoint reads the same way a saved FPI record does: header info, shared measurements,
+  // then a full item-by-item checklist per product with all 5 sample readings.
+  function ipiOpenDetail(row){
+    const d = row.data || {};
+    const runHeader = ipiSelectedRunData || {};
+    const backdrop = document.createElement('div');
+    backdrop.className = 'fpi-modal-backdrop';
+    const headerGrid = `
+      <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:8px 16px; background:#fbfaf7; border:1px solid var(--line); border-radius:8px; padding:12px 14px; margin-bottom:14px; font-size:12.5px;">
+        <div><b style="display:block;font-size:10px;text-transform:uppercase;color:#8a8d87;letter-spacing:.05em;">Material</b>${escapeHtml(runHeader.material)||'—'}</div>
+        <div><b style="display:block;font-size:10px;text-transform:uppercase;color:#8a8d87;letter-spacing:.05em;">Colour</b>${escapeHtml(runHeader.colour)||'—'}</div>
+        <div><b style="display:block;font-size:10px;text-transform:uppercase;color:#8a8d87;letter-spacing:.05em;">Customer</b>${escapeHtml(runHeader.customer)||'—'}</div>
+        <div><b style="display:block;font-size:10px;text-transform:uppercase;color:#8a8d87;letter-spacing:.05em;">Machine</b>${escapeHtml(runHeader.machine)||'—'}</div>
+        <div><b style="display:block;font-size:10px;text-transform:uppercase;color:#8a8d87;letter-spacing:.05em;">Inspector</b>${escapeHtml(row.inspector)||'—'}</div>
+        <div><b style="display:block;font-size:10px;text-transform:uppercase;color:#8a8d87;letter-spacing:.05em;">Overall Result</b>${escapeHtml(row.overall_result)||'—'}</div>
+      </div>
+      ${d.remarks ? `<div style="font-size:12.5px; margin-bottom:14px;"><b style="display:block;font-size:10px;text-transform:uppercase;color:#8a8d87;letter-spacing:.05em;">Remarks</b>${escapeHtml(d.remarks)}</div>` : ''}
+    `;
+    const sharedSection = d.sharedItems ? SHARED_ITEMS.map(item=>{
+      const entry = d.sharedItems[item.no];
+      if(!entry) return '';
+      const isRunner = item.no === 1;
+      const cells = (isRunner && d.hotRunner) ? 'Hot runner (0)' : SAMPLES.map(s=>{
+        const cell = entry.samples[s] || {};
+        return escapeHtml(cell.value || '–');
+      }).join(' &nbsp;|&nbsp; ');
+      return `<div style="margin-bottom:10px;">
+        <div style="font-weight:700;font-size:13px;margin-bottom:4px;">${escapeHtml(item.name)} (shared)</div>
+        <div style="padding:8px;border:1px solid var(--line);border-radius:6px;font-size:12.5px;" class="stamp">${cells}</div>
+      </div>`;
+    }).join('') : '';
+    const blockSections = (d.blocks||[]).map(blk=>{
+      const rows = blk.results.map(row2=>{
+        const cells = SAMPLES.map(s=>{
+          const cell = row2.samples[s];
+          if(row2.type==='measure') return escapeHtml(cell.value || '–');
+          return escapeHtml(cell.result || '–');
+        }).join(' &nbsp;|&nbsp; ');
+        return `<div style="display:flex;justify-content:space-between;padding:5px 8px;border-bottom:1px solid #f0efe9;font-size:12.5px;">
+          <span>${row2.no}. ${escapeHtml(row2.name)}</span><span class="stamp">${cells}</span></div>`;
+      }).join('');
+      const cavNote = blk.originalCavity && String(blk.cavitiesRunning)!==String(blk.originalCavity)
+        ? ` <span style="color:var(--amber);">⚠ running ${escapeHtml(blk.cavitiesRunning)} of ${escapeHtml(blk.originalCavity)} cavities</span>` : ` <span class="stamp" style="color:#8a8d87;">(${escapeHtml(blk.cavitiesRunning||'—')} cavities)</span>`;
+      return `<div style="margin-bottom:14px;">
+        <div style="font-weight:700;font-size:13px;margin-bottom:4px;">${escapeHtml(blk.itemCode)} — ${escapeHtml(blk.overallResult)}${cavNote}</div>
+        <div style="max-height:220px;overflow-y:auto;border:1px solid var(--line);border-radius:6px;">${rows}</div>
+      </div>`;
+    }).join('');
+    backdrop.innerHTML = `<div class="fpi-modal">
+      <button class="fpi-btn ghost fpi-modal-close" id="ipi-modal-close">Close</button>
+      <h3>${escapeHtml(runHeader.mixedMode ? runHeader.mouldRef : runHeader.itemCode)}</h3>
+      <div style="font-size:12px;color:#7a7d78;margin-bottom:10px;">Run ID ${escapeHtml(d.runId)} · Checked ${new Date(row.checked_at).toLocaleString()}</div>
+      ${headerGrid}
+      ${sharedSection}
+      ${blockSections}
+      </div>`;
+    document.body.appendChild(backdrop);
+    backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) backdrop.remove(); });
+    backdrop.querySelector('#ipi-modal-close').addEventListener('click', ()=>backdrop.remove());
   }
 
   document.getElementById('ipi_run_select').addEventListener('change', async (e)=>{
