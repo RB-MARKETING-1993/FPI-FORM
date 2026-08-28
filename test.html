@@ -176,6 +176,7 @@
   <div class="fpi-tabs">
     <div class="fpi-tab active" data-tab="new">New Inspection</div>
     <div class="fpi-tab" data-tab="records">Records <span id="fpi-rec-count" class="stamp"></span></div>
+    <div class="fpi-tab" data-tab="ipi">In-Process</div>
     <div class="fpi-tab" data-tab="dashboard">Dashboard</div>
     <div class="fpi-tab" data-tab="lists" id="fpi-tab-lists" style="display:none;">Manage Lists</div>
     <div class="fpi-tab" data-tab="auditlog" id="fpi-tab-auditlog" style="display:none;">Deletion Log</div>
@@ -274,6 +275,49 @@
       <button class="fpi-btn primary" id="fpi-rec-batchreview" style="padding:8px 16px; font-size:12.5px;">Mark Selected as Reviewed</button>
     </div>
     <div id="fpi-rec-list"></div>
+  </div>
+
+  <div class="fpi-panel" id="fpi-panel-ipi" style="display:none;">
+    <div class="fpi-recnote" style="margin-bottom:14px;">Checks the same items as First Piece Inspection. Pick the run this belongs to, then log a checkpoint — aim for at least twice a day until the run ends.</div>
+
+    <div class="fpi-section-label">Run</div>
+    <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px; flex-wrap:wrap;">
+      <select id="ipi_run_select" style="flex:1; min-width:240px; padding:10px 12px; border:1px solid var(--line-strong); border-radius:6px; font-size:15px;"><option value="">Select the FPI run this belongs to…</option></select>
+      <span id="ipi_run_status_badge" class="fpi-badge pending" style="display:none;"></span>
+      <button type="button" class="fpi-btn ghost" id="ipi_end_run_btn" style="display:none; padding:8px 14px; font-size:12px;">End run</button>
+    </div>
+    <div class="fpi-fieldgrid" id="ipi_run_header" style="display:none;">
+      <div class="fpi-field"><label id="ipi_h_item_label">Item Code</label><input readonly id="ipi_h_item"/></div>
+      <div class="fpi-field"><label>Material</label><input readonly id="ipi_h_material"/></div>
+      <div class="fpi-field"><label>Colour</label><input readonly id="ipi_h_colour"/></div>
+      <div class="fpi-field"><label>Customer</label><input readonly id="ipi_h_customer"/></div>
+      <div class="fpi-field"><label>Machine</label><input readonly id="ipi_h_machine"/></div>
+      <div class="fpi-field"><label>Cavity</label><input readonly id="ipi_h_cavity"/></div>
+    </div>
+    <div id="ipi_nudge" style="display:none;"></div>
+
+    <div id="ipi_form_wrap" style="display:none;">
+      <div class="fpi-section-label">Shared shot measurements</div>
+      <div class="fpi-recnote" style="margin-bottom:6px;">Reference line under each item shows the mean from the linked FPI record — flags in red if this checkpoint's readings drift more than 5% from it.</div>
+      <div id="ipi_shared_block"></div>
+
+      <div class="fpi-section-label">Defect Check List — same items as FPI</div>
+      <div class="fpi-recnote" style="margin-bottom:6px;">Mixed-mould runs show one checklist per product/cavity from the FPI record — fill in whichever ones you're checking this round.</div>
+      <div id="ipi_checklist_container"></div>
+
+      <div class="fpi-section-label">Remarks</div>
+      <div class="fpi-remarks"><textarea id="ipi_remarks" placeholder="Any additional notes about this checkpoint..."></textarea></div>
+
+      <div class="fpi-footerbar">
+        <div class="fpi-overall" style="font-size:12.5px; color:#7a7d78;">Checkpoint result shown in each checklist heading above.</div>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <button type="button" class="fpi-btn primary" id="ipi_save_btn">Log checkpoint</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="fpi-section-label">Run log</div>
+    <div id="ipi_log"></div>
   </div>
 
   <div class="fpi-panel" id="fpi-panel-lists" style="display:none;">
@@ -1442,10 +1486,12 @@
       const which = tab.dataset.tab;
       document.getElementById('fpi-panel-new').style.display = which==='new' ? '' : 'none';
       document.getElementById('fpi-panel-records').style.display = which==='records' ? '' : 'none';
+      document.getElementById('fpi-panel-ipi').style.display = which==='ipi' ? '' : 'none';
       document.getElementById('fpi-panel-lists').style.display = which==='lists' ? '' : 'none';
       document.getElementById('fpi-panel-auditlog').style.display = which==='auditlog' ? '' : 'none';
       document.getElementById('fpi-panel-dashboard').style.display = which==='dashboard' ? '' : 'none';
       if(which==='records') loadRecords();
+      if(which==='ipi') ipiLoadRuns();
       if(which==='lists'){ renderAllListManagers(); renderUserPins(); }
       if(which==='auditlog') loadAuditLog();
       if(which==='dashboard') loadDashboard();
@@ -2483,6 +2529,445 @@
   setupBlocks([{key:'main', label:'', sub:''}]);
   resetSharedBlock();
   loadRecords();
+
+  // ==========================================================================
+  // In-Process Inspection — reuses ITEMS/SHARED_ITEMS/buildBlockTable from FPI
+  // above so the checklist is guaranteed identical. Own DOM ids (ipi_*) and own
+  // module state (ipiSharedWrap etc.) throughout so nothing here can collide
+  // with the New Inspection tab's own state. Stored in its own `ipi_records`
+  // table, queried directly via sbFetch_ rather than through window.storage.
+  // ==========================================================================
+  let ipiRunsCache = [];
+  let ipiSelectedRun = null;
+  let ipiSelectedRunData = null; // full FPI record's saved `data` json — blocks[], sharedItems, hotRunner, etc.
+  let ipiChecklistBlocks = []; // [{itemCode, wrap, cavInput, originalCavity}] — one per FPI block; >1 only for mixed-mould runs
+  let ipiCavityOverrides = {}; // itemCode -> last-typed "cavities running" value, kept across saves within the same run
+  let ipiSharedWrap = null;
+  let ipiRefRefreshers = {}; // "sharedNo" or "blockIdx" -> refresh() for the live FPI-reference comparison line
+  const IPI_MIN_PER_DAY = 2;
+  const IPI_TOLERANCE_PCT = 5;
+
+  async function ipiLoadRuns(){
+    const sel = document.getElementById('ipi_run_select');
+    const prevValue = sel.value;
+    try{
+      const rows = await sbFetch_('fpi_records?select=id,run_id,item_code,mould_ref,machine,mixed_mode,submitted_at&order=submitted_at.desc&limit=200');
+      ipiRunsCache = rows || [];
+      sel.innerHTML = '<option value="">Select the FPI run this belongs to…</option>' + ipiRunsCache.map(r=>{
+        const label = (r.mixed_mode ? r.mould_ref : r.item_code) + ' · M' + r.machine;
+        return `<option value="${escapeHtml(r.id)}">${escapeHtml(label)}</option>`;
+      }).join('');
+      if(prevValue && ipiRunsCache.some(r=>r.id===prevValue)) sel.value = prevValue;
+    }catch(e){ console.error(e); toast('Could not load FPI runs.'); }
+  }
+
+  // Mean of the 5 sample values from an FPI shared-item or checklist-row `samples` object —
+  // used to build the "FPI reference" line staff compare their in-process readings against.
+  function ipiMeanOfSamples(samples){
+    if(!samples) return null;
+    const vals = SAMPLES.map(s=> parseFloat((samples[s]||{}).value)).filter(v=>!isNaN(v));
+    if(!vals.length) return null;
+    return vals.reduce((a,b)=>a+b,0)/vals.length;
+  }
+  function ipiComputeReferencesForBlock(block){
+    const partWeightRow = block ? block.results.find(r=>r.no===3) : null;
+    const shared = (ipiSelectedRunData && ipiSelectedRunData.sharedItems) || {};
+    return {
+      partWeight: partWeightRow ? ipiMeanOfSamples(partWeightRow.samples) : null,
+      runnerWeight: ipiSelectedRunData && ipiSelectedRunData.hotRunner ? null : ipiMeanOfSamples(shared['1'] && shared['1'].samples),
+      cycleTime: ipiMeanOfSamples(shared['2'] && shared['2'].samples),
+      hotRunner: !!(ipiSelectedRunData && ipiSelectedRunData.hotRunner)
+    };
+  }
+  // Appends a small live-updating line under an item's name showing the FPI reference mean and
+  // how this checkpoint's own readings compare — turns red once the drift passes tolerance.
+  function ipiWireReference(wrap, itemNo, refValue, isHotRunnerItem){
+    const anyInput = wrap.querySelector(`.fpi-measure-input[data-item="${itemNo}"]`);
+    if(!anyInput) return;
+    const nameCell = anyInput.closest('tr').querySelector('.fpi-namecell');
+    const refLine = document.createElement('div');
+    refLine.style.cssText = 'font-size:10.5px; margin-top:3px; color:#7a7d78;';
+    nameCell.appendChild(refLine);
+    function refresh(){
+      if(isHotRunnerItem && document.getElementById('ipi_hotrunner') && document.getElementById('ipi_hotrunner').checked){
+        refLine.textContent = 'FPI ref: n/a (hot runner)'; refLine.style.color = '#9a9d96'; refLine.style.fontWeight = '400'; return;
+      }
+      if(refValue===null || refValue===undefined || isNaN(refValue)){
+        refLine.textContent = 'No FPI reference available'; refLine.style.color = '#9a9d96'; refLine.style.fontWeight = '400'; return;
+      }
+      const inputs = wrap.querySelectorAll(`.fpi-measure-input[data-item="${itemNo}"]`);
+      const vals = Array.from(inputs).map(i=>parseFloat(i.value)).filter(v=>!isNaN(v));
+      if(!vals.length){
+        refLine.textContent = `FPI ref: ${refValue.toFixed(3)}`; refLine.style.color = '#7a7d78'; refLine.style.fontWeight = '400'; return;
+      }
+      const mean = vals.reduce((a,b)=>a+b,0)/vals.length;
+      const diffPct = refValue !== 0 ? ((mean-refValue)/refValue)*100 : 0;
+      const flagged = Math.abs(diffPct) > IPI_TOLERANCE_PCT;
+      refLine.innerHTML = `FPI ref: ${refValue.toFixed(3)} · now: ${mean.toFixed(3)} (${diffPct>=0?'+':''}${diffPct.toFixed(1)}%)` + (flagged ? ' ⚠' : '');
+      refLine.style.color = flagged ? 'var(--ng)' : 'var(--ok)';
+      refLine.style.fontWeight = flagged ? '700' : '400';
+    }
+    wrap.querySelectorAll(`.fpi-measure-input[data-item="${itemNo}"]`).forEach(inp=> inp.addEventListener('input', refresh));
+    ipiRefRefreshers[itemNo] = refresh;
+    refresh();
+  }
+
+  function ipiRenderHeader(){
+    const d = ipiSelectedRunData;
+    document.getElementById('ipi_h_item_label').textContent = d.mixedMode ? 'Mould / Job Reference' : 'Item Code';
+    document.getElementById('ipi_h_item').value = (d.mixedMode ? d.mouldRef : d.itemCode) || '';
+    document.getElementById('ipi_h_material').value = d.material || '';
+    document.getElementById('ipi_h_colour').value = d.colour || '';
+    document.getElementById('ipi_h_customer').value = d.customer || '';
+    document.getElementById('ipi_h_machine').value = d.machine || '';
+    document.getElementById('ipi_h_cavity').value = d.nosCavity || '';
+    document.getElementById('ipi_run_header').style.display = '';
+  }
+
+  function buildIpiSharedBlock(){
+    const wrap = document.createElement('div');
+    wrap.className = 'fpi-block';
+    wrap.innerHTML = `
+      <div class="fpi-tablewrap">
+        <table class="fpi-grid">
+          <thead><tr>
+            <th class="fpi-sticky-h">Item / Instrument</th>
+            <th>Sample 1</th><th>Sample 2</th><th>Sample 3</th><th>Sample 4</th><th>Sample 5</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>`;
+    const tbody = wrap.querySelector('tbody');
+    SHARED_ITEMS.forEach(item=>{
+      const tr = document.createElement('tr');
+      const nameCell = document.createElement('td');
+      nameCell.className = 'fpi-namecell';
+      nameCell.innerHTML = `<span class="fpi-no">${item.no}</span><span class="fpi-itemname">${item.name}${item.unit?' ('+item.unit+')':''}</span><div class="fpi-iteminstr">${item.instrument}</div>`;
+      if(item.no === 1){
+        const hrLabel = document.createElement('label');
+        hrLabel.style.cssText = 'display:flex; align-items:center; gap:5px; font-size:11px; font-weight:600; color:var(--navy); margin-top:5px; cursor:pointer;';
+        hrLabel.innerHTML = `<input type="checkbox" id="ipi_hotrunner"/> Hot Runner (= 0)`;
+        hrLabel.querySelector('#ipi_hotrunner').addEventListener('change', applyIpiHotRunnerState);
+        nameCell.appendChild(hrLabel);
+      }
+      tr.appendChild(nameCell);
+      SAMPLES.forEach(s=>{
+        const td = document.createElement('td');
+        td.className = 'fpi-samplecell';
+        td.innerHTML = `<input class="fpi-measure-input" type="number" step="0.001" data-item="${item.no}" data-sample="${s}" data-role="value" placeholder="value"/>`;
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    wrap.querySelectorAll('.fpi-measure-input').forEach(inp=> enforceMaxDecimals_(inp, 3));
+    return wrap;
+  }
+  function applyIpiHotRunnerState(){
+    const cb = document.getElementById('ipi_hotrunner');
+    const on = cb && cb.checked;
+    SAMPLES.forEach(s=>{
+      const inp = ipiSharedWrap.querySelector(`.fpi-measure-input[data-item="1"][data-sample="${s}"]`);
+      if(!inp) return;
+      inp.disabled = on;
+      if(on) inp.value = '0';
+    });
+    if(ipiRefRefreshers[1]) ipiRefRefreshers[1]();
+  }
+  function ipiResetSharedBlock(){
+    const container = document.getElementById('ipi_shared_block');
+    container.innerHTML = '';
+    ipiSharedWrap = buildIpiSharedBlock();
+    container.appendChild(ipiSharedWrap);
+    applyIpiHotRunnerState();
+    // Runner Weight / Cycle Time are shared across the whole shot, so any block's reference works.
+    const refs = ipiComputeReferencesForBlock((ipiSelectedRunData && ipiSelectedRunData.blocks && ipiSelectedRunData.blocks[0]) || null);
+    ipiWireReference(ipiSharedWrap, 1, refs.runnerWeight, true);
+    ipiWireReference(ipiSharedWrap, 2, refs.cycleTime, false);
+  }
+  function getIpiSharedResults(){
+    const out = {};
+    SHARED_ITEMS.forEach(item=>{
+      const samples = {};
+      SAMPLES.forEach(s=>{
+        const v = ipiSharedWrap.querySelector(`.fpi-measure-input[data-item="${item.no}"][data-sample="${s}"]`).value;
+        samples[s] = {value:v};
+      });
+      out[item.no] = {name:item.name, samples};
+    });
+    return out;
+  }
+
+  // One checklist block per FPI block — always. A non-mixed run's FPI record has exactly one
+  // block already, so this naturally renders a single checklist there; a mixed-mould run's
+  // record has one block per product/cavity, so all of them render at once here too, matching
+  // how FPI itself shows every cavity's checklist together rather than picking one at a time.
+  function ipiResetChecklist(){
+    const container = document.getElementById('ipi_checklist_container');
+    container.innerHTML = '';
+    ipiChecklistBlocks = [];
+    const blocksSource = (ipiSelectedRunData && ipiSelectedRunData.blocks) || [];
+    blocksSource.forEach((b, idx)=>{
+      const sub = b.cavityQty ? `${b.cavityQty} cavit${b.cavityQty>1?'ies':'y'} — checkpoint` : 'Checkpoint';
+      const wrap = buildBlockTable('ipi-checkpoint-'+idx, b.itemCode, sub);
+      container.appendChild(wrap);
+      const refs = ipiComputeReferencesForBlock(b);
+      ipiWireReference(wrap, 3, refs.partWeight, false);
+
+      // Cavity count is per product/cavity in mixed mode (each block has its own cavityQty from
+      // the FPI record); in simple mode there's one block, so this falls back to the run's total.
+      const originalCavity = ipiSelectedRunData.mixedMode ? b.cavityQty : ipiSelectedRunData.nosCavity;
+      const initial = ipiCavityOverrides.hasOwnProperty(b.itemCode) ? ipiCavityOverrides[b.itemCode] : (originalCavity || '');
+      const cavRow = document.createElement('div');
+      cavRow.style.cssText = 'display:flex; align-items:center; gap:8px; padding:8px 14px; background:#fbfaf7; border:1px solid var(--line); border-top:none; font-size:12px;';
+      cavRow.innerHTML = `<label style="color:#6b6f6a;">Cavities running now:</label><input type="number" step="1" class="ipi-cav-input" style="width:70px; padding:5px 7px; border:1px solid var(--line-strong); border-radius:5px; font-size:13px;" value="${escapeHtml(initial)}"/><span style="color:#9a9d96;">(FPI: ${escapeHtml(originalCavity||'—')})</span>`;
+      wrap.insertBefore(cavRow, wrap.querySelector('.fpi-tablewrap'));
+      const cavInput = cavRow.querySelector('.ipi-cav-input');
+      enforceIntegerOnly_(cavInput);
+      cavInput.addEventListener('input', ()=>{ ipiCavityOverrides[b.itemCode] = cavInput.value; });
+
+      ipiChecklistBlocks.push({itemCode:b.itemCode, wrap, cavInput, originalCavity});
+    });
+  }
+
+  async function ipiRefreshRunStatus(){
+    const statusBadge = document.getElementById('ipi_run_status_badge');
+    const endBtn = document.getElementById('ipi_end_run_btn');
+    let status = 'active';
+    try{
+      const r = await window.storage.get('ipi_run_status:'+ipiSelectedRun.run_id, true);
+      if(r && r.value) status = r.value;
+    }catch(e){}
+    statusBadge.style.display = '';
+    if(status==='ended'){
+      statusBadge.className = 'fpi-badge ok'; statusBadge.textContent = 'Ended';
+      endBtn.textContent = 'Reopen run';
+    } else {
+      statusBadge.className = 'fpi-badge pending'; statusBadge.textContent = 'Active';
+      endBtn.textContent = 'End run';
+    }
+  }
+  document.getElementById('ipi_end_run_btn').addEventListener('click', async ()=>{
+    if(!ipiSelectedRun) return;
+    const ended = document.getElementById('ipi_run_status_badge').textContent === 'Ended';
+    await window.storage.set('ipi_run_status:'+ipiSelectedRun.run_id, ended ? 'active' : 'ended', true);
+    toast(ended ? 'Run reopened.' : 'Run marked ended.');
+    ipiRefreshRunStatus();
+  });
+
+  function ipiUpdateNudge(todayCount){
+    const el = document.getElementById('ipi_nudge');
+    if(todayCount >= IPI_MIN_PER_DAY){
+      el.style.cssText = 'display:flex; align-items:center; gap:8px; font-size:12.5px; padding:8px 12px; border-radius:6px; background:var(--ok-bg); color:var(--ok); margin-bottom:14px;';
+      el.textContent = todayCount + ' checkpoint(s) logged today — minimum met.';
+    } else {
+      el.style.cssText = 'display:flex; align-items:center; gap:8px; font-size:12.5px; padding:8px 12px; border-radius:6px; background:var(--amber-bg); color:var(--amber); margin-bottom:14px;';
+      el.textContent = todayCount + ' of ' + IPI_MIN_PER_DAY + ' minimum checkpoints logged today.';
+    }
+  }
+
+  async function ipiLoadLog(){
+    const logEl = document.getElementById('ipi_log');
+    logEl.innerHTML = '<div class="fpi-empty">Loading…</div>';
+    try{
+      const rows = await sbFetch_(`ipi_records?run_id=eq.${encodeURIComponent(ipiSelectedRun.run_id)}&select=id,checked_at,inspector,overall_result,data&order=checked_at.desc`);
+      if(!rows.length){
+        logEl.innerHTML = '<div class="fpi-empty">No checkpoints logged for this run yet.</div>';
+        ipiUpdateNudge(0);
+        return;
+      }
+      const groups = {}; const order = [];
+      rows.forEach(r=>{
+        const day = formatLocalDate_(r.checked_at);
+        if(!groups[day]){ groups[day]=[]; order.push(day); }
+        groups[day].push(r);
+      });
+      const todayStr = formatLocalDate_(new Date().toISOString());
+      logEl.innerHTML = order.map(day=>{
+        const items = groups[day].map(r=>{
+          const isNg = r.overall_result && r.overall_result.indexOf('NG')>=0;
+          const bg = isNg ? 'var(--ng-bg)' : 'var(--ok-bg)';
+          const col = isNg ? 'var(--ng)' : 'var(--ok)';
+          const time = new Date(r.checked_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+          const product = r.data && r.data.blocks && r.data.blocks.length>1 ? ' · ' + r.data.blocks.map(b=>escapeHtml(b.itemCode)).join(', ') : '';
+          const cavFlags = (r.data && r.data.blocks || []).filter(b=> b.originalCavity && String(b.cavitiesRunning)!==String(b.originalCavity))
+            .map(b=> `${escapeHtml(b.itemCode)} ${escapeHtml(b.cavitiesRunning)}/${escapeHtml(b.originalCavity)}`);
+          const cavityFlag = cavFlags.length ? ` <span style="color:var(--amber); font-weight:700;">⚠ ${cavFlags.join(', ')} cav</span>` : '';
+          return `<div style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font-size:12.5px; margin-bottom:6px;">
+            <span>${escapeHtml(time)} · ${escapeHtml(r.inspector||'—')}${product}${cavityFlag}</span>
+            <span style="font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px; background:${bg}; color:${col};">${escapeHtml(r.overall_result||'—')}</span>
+          </div>`;
+        }).join('');
+        return `<div style="font-size:11.5px; color:#7a7d78; margin:10px 0 4px;">${escapeHtml(day)}${day===todayStr?' (today)':''}</div>${items}`;
+      }).join('');
+      ipiUpdateNudge(groups[todayStr] ? groups[todayStr].length : 0);
+    }catch(e){
+      console.error(e);
+      logEl.innerHTML = '<div class="fpi-empty">Could not load the run log.</div>';
+    }
+  }
+
+  document.getElementById('ipi_run_select').addEventListener('change', async (e)=>{
+    const id = e.target.value;
+    ipiSelectedRun = ipiRunsCache.find(r=>r.id===id) || null;
+    const headerEl = document.getElementById('ipi_run_header');
+    const formWrap = document.getElementById('ipi_form_wrap');
+    const endBtn = document.getElementById('ipi_end_run_btn');
+    const statusBadge = document.getElementById('ipi_run_status_badge');
+    const nudgeEl = document.getElementById('ipi_nudge');
+    if(!ipiSelectedRun){
+      ipiSelectedRunData = null;
+      headerEl.style.display = 'none'; formWrap.style.display = 'none';
+      endBtn.style.display = 'none'; statusBadge.style.display = 'none';
+      nudgeEl.style.display = 'none';
+      document.getElementById('ipi_log').innerHTML = '';
+      return;
+    }
+    try{
+      const rows = await sbFetch_(`fpi_records?id=eq.${encodeURIComponent(ipiSelectedRun.id)}&select=data`);
+      ipiSelectedRunData = rows && rows[0] ? rows[0].data : null;
+    }catch(err){ console.error(err); toast('Could not load the FPI record for this run.'); ipiSelectedRunData = null; }
+    if(!ipiSelectedRunData){ formWrap.style.display = 'none'; return; }
+
+    ipiCavityOverrides = {};
+    ipiRenderHeader();
+    formWrap.style.display = '';
+    endBtn.style.display = '';
+    nudgeEl.style.display = '';
+    ipiResetChecklist();
+    ipiResetSharedBlock();
+    document.getElementById('ipi_remarks').value = '';
+    await ipiRefreshRunStatus();
+    await ipiLoadLog();
+  });
+
+  document.getElementById('ipi_save_btn').addEventListener('click', ()=>{
+    if(!ipiSelectedRun || !ipiSelectedRunData){ toast('Select a run first.'); return; }
+    if(!ipiChecklistBlocks.length){ toast('No checklist to log.'); return; }
+    const anyStarted = ipiChecklistBlocks.some(b=> b.wrap.querySelector('.fpi-block-badge').textContent !== 'NOT STARTED');
+    if(!anyStarted){ toast('Record at least one check result before saving.'); return; }
+    ipiShowSubmitReview(ipiCollectCheckpoint());
+  });
+
+  // Reads the current DOM state of every checklist block + the shared measurements into the
+  // shape that both the review modal and the actual save use — computed once so what the
+  // inspector reviews is exactly what gets saved, not a second independent read of the form.
+  function ipiCollectCheckpoint(){
+    const blocksData = ipiChecklistBlocks.map(b=>{
+      const results = ITEMS.map(item=>{
+        const row = {no:item.no, name:item.name, instrument:item.instrument, type:item.type, samples:{}};
+        SAMPLES.forEach(s=>{
+          if(item.type==='measure'){
+            const v = b.wrap.querySelector(`.fpi-measure-input[data-item="${item.no}"][data-sample="${s}"]`).value;
+            row.samples[s] = {value:v};
+          } else {
+            const btn = b.wrap.querySelector(`.fpi-toggle[data-item="${item.no}"][data-sample="${s}"]`);
+            row.samples[s] = {result:btn.dataset.state};
+          }
+        });
+        return row;
+      });
+      return {
+        itemCode: b.itemCode, overallResult: b.wrap.querySelector('.fpi-block-badge').textContent, results,
+        cavitiesRunning: b.cavInput.value.trim(), originalCavity: b.originalCavity
+      };
+    });
+    const badgeTexts = blocksData.map(b=>b.overallResult);
+    let overallResult;
+    if(badgeTexts.some(t=>t.indexOf('NG')>=0)) overallResult = 'NG — DEFECT FOUND';
+    else if(badgeTexts.every(t=>t.indexOf('OK')>=0)) overallResult = 'OK — PASS';
+    else overallResult = 'INCOMPLETE';
+    return {
+      blocksData, overallResult, sharedItems: getIpiSharedResults(), hotRunner: document.getElementById('ipi_hotrunner').checked,
+      remarks: document.getElementById('ipi_remarks').value.trim()
+    };
+  }
+
+  function ipiShowSubmitReview(checkpoint){
+    const d = ipiSelectedRunData;
+    const fld = (label, val) => `<div><b style="display:block;font-size:10px;text-transform:uppercase;color:#8a8d87;letter-spacing:.05em;">${label}</b>${escapeHtml(val)||'—'}</div>`;
+    const headerReview = `<div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px 16px; background:#fbfaf7; border:1px solid var(--line); border-radius:8px; padding:12px 14px; margin-bottom:14px; font-size:12.5px;">
+      ${d.mixedMode ? fld('Mould / Job Ref', d.mouldRef) : fld('Item Code', d.itemCode)}
+      ${fld('Material', d.material)}
+      ${fld('Colour', d.colour)}
+      ${fld('Customer', d.customer)}
+      ${fld('Machine', d.machine)}
+    </div>`;
+    const sharedReview = SHARED_ITEMS.map(item=>{
+      const vals = SAMPLES.map(s=> (checkpoint.sharedItems[item.no].samples[s]||{}).value || '–').join(' | ');
+      return `<div style="font-size:12px; margin-bottom:6px;"><b>${escapeHtml(item.name)}:</b> ${escapeHtml(vals)}</div>`;
+    }).join('');
+    const blocksReview = checkpoint.blocksData.map(blk=>{
+      const weightRow = blk.results.find(r=>r.no===3);
+      const weights = weightRow ? SAMPLES.map(s=>(weightRow.samples[s]||{}).value || '–').join(' | ') : '';
+      const resColor = blk.overallResult.indexOf('NG')>=0 ? 'var(--ng)' : (blk.overallResult.indexOf('OK')>=0 ? 'var(--ok)' : 'var(--amber)');
+      const cavChanged = blk.originalCavity && String(blk.cavitiesRunning) !== String(blk.originalCavity);
+      const cavNote = cavChanged ? `<div style="color:var(--amber); font-size:11px; margin-top:2px;">⚠ Running ${escapeHtml(blk.cavitiesRunning)} of ${escapeHtml(blk.originalCavity)} cavities — differs from the FPI record</div>` : '';
+      return `<div style="padding:6px 10px; border-bottom:1px solid #f0efe9; font-size:12.5px;">
+        <div style="display:flex; justify-content:space-between;">
+          <span><b>${escapeHtml(blk.itemCode)}</b> — Part Weight: ${escapeHtml(weights)}</span>
+          <span style="color:${resColor}; font-weight:700;">${escapeHtml(blk.overallResult)}</span>
+        </div>
+        ${cavNote}
+      </div>`;
+    }).join('');
+    const backdrop = document.createElement('div');
+    backdrop.className = 'fpi-modal-backdrop';
+    backdrop.innerHTML = `<div class="fpi-modal" style="max-width:640px;">
+      <h3>Review before logging</h3>
+      <div style="font-size:12px; color:#7a7d78; margin-bottom:14px;">Check every reading below — especially anything flagged against the FPI reference — before confirming.</div>
+      ${headerReview}
+      <div style="margin-bottom:14px;"><b style="display:block;font-size:10px;text-transform:uppercase;color:#8a8d87;letter-spacing:.05em;margin-bottom:6px;">Shared measurements</b>${sharedReview}</div>
+      <div style="margin-bottom:14px;">
+        <b style="display:block;font-size:10px;text-transform:uppercase;color:#8a8d87;letter-spacing:.05em;margin-bottom:6px;">Products checked</b>
+        <div style="border:1px solid var(--line); border-radius:6px;">${blocksReview}</div>
+      </div>
+      ${checkpoint.remarks ? `<div style="font-size:12.5px; margin-bottom:14px;"><b style="display:block;font-size:10px;text-transform:uppercase;color:#8a8d87;letter-spacing:.05em;">Remarks</b>${escapeHtml(checkpoint.remarks)}</div>` : ''}
+      <div style="display:flex; gap:10px; justify-content:flex-end;">
+        <button type="button" class="fpi-btn ghost" id="ipi-review-back">Go back and edit</button>
+        <button type="button" class="fpi-btn primary" id="ipi-review-confirm">Confirm & Log</button>
+      </div>
+    </div>`;
+    document.body.appendChild(backdrop);
+    backdrop.querySelector('#ipi-review-back').addEventListener('click', ()=>backdrop.remove());
+    backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) backdrop.remove(); });
+    backdrop.querySelector('#ipi-review-confirm').addEventListener('click', ()=>{
+      backdrop.remove();
+      showNamePrompt('Log checkpoint', 'Enter your personal PIN to log this checkpoint under your name.', async (name)=>{
+        await ipiSaveCheckpoint(name, checkpoint);
+      });
+    });
+  }
+
+  async function ipiSaveCheckpoint(inspectorName, checkpoint){
+    const now = new Date();
+    const id = 'ipi:' + now.getTime() + '-' + Math.random().toString(36).slice(2,7);
+    const checkedAt = now.toISOString();
+    const data = {
+      id, runId: ipiSelectedRun.run_id, fpiRecordId: ipiSelectedRun.id,
+      checkedAt, inspector: inspectorName,
+      overallResult: checkpoint.overallResult, remarks: checkpoint.remarks,
+      sharedItems: checkpoint.sharedItems, hotRunner: checkpoint.hotRunner,
+      blocks: checkpoint.blocksData
+    };
+    const overallResult = checkpoint.overallResult;
+    const saveBtn = document.getElementById('ipi_save_btn');
+    saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
+    try{
+      await sbFetch_('ipi_records', { method:'POST', headers:{'Prefer':'return=minimal'}, body: JSON.stringify({
+        id, run_id: ipiSelectedRun.run_id, fpi_record_id: ipiSelectedRun.id, checked_at: checkedAt,
+        inspector: inspectorName, overall_result: overallResult, data
+      })});
+      toast('Checkpoint logged.');
+      ipiResetChecklist();
+      ipiResetSharedBlock();
+      document.getElementById('ipi_remarks').value = '';
+      await ipiLoadLog();
+    }catch(e){
+      console.error(e); toast('Save failed — check connection and try again.');
+    } finally {
+      saveBtn.disabled = false; saveBtn.textContent = 'Log checkpoint';
+    }
+  }
 })();
 </script>
 </body>
