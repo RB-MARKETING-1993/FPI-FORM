@@ -177,6 +177,7 @@
     <div class="fpi-tab active" data-tab="new">New Inspection</div>
     <div class="fpi-tab" data-tab="records">Records <span id="fpi-rec-count" class="stamp"></span></div>
     <div class="fpi-tab" data-tab="ipi">In-Process</div>
+    <div class="fpi-tab" data-tab="ipihistory">IPI History</div>
     <div class="fpi-tab" data-tab="dashboard">Dashboard</div>
     <div class="fpi-tab" data-tab="lists" id="fpi-tab-lists" style="display:none;">Manage Lists</div>
     <div class="fpi-tab" data-tab="auditlog" id="fpi-tab-auditlog" style="display:none;">Deletion Log</div>
@@ -286,9 +287,6 @@
       <span id="ipi_run_status_badge" class="fpi-badge pending" style="display:none;"></span>
       <button type="button" class="fpi-btn ghost" id="ipi_end_run_btn" style="display:none; padding:8px 14px; font-size:12px;">End run</button>
     </div>
-    <label style="display:flex; align-items:center; gap:6px; font-size:11.5px; color:#7a7d78; margin-bottom:10px; cursor:pointer;">
-      <input type="checkbox" id="ipi_show_ended"/> Show ended runs too — to retrieve past production records
-    </label>
     <div class="fpi-fieldgrid" id="ipi_run_header" style="display:none;">
       <div class="fpi-field"><label id="ipi_h_item_label">Item Code</label><input readonly id="ipi_h_item"/></div>
       <div class="fpi-field"><label>Material</label><input readonly id="ipi_h_material"/></div>
@@ -331,6 +329,29 @@
       <button type="button" class="fpi-btn ghost" id="ipi_export_btn" style="padding:6px 14px; font-size:12px;">Export Part Info CSV</button>
     </div>
     <div id="ipi_log"></div>
+  </div>
+
+  <div class="fpi-panel" id="fpi-panel-ipihistory" style="display:none;">
+    <div class="fpi-recnote" style="margin-bottom:14px;">Concluded production runs — retrieve and export past In-Process Inspection checkpoints. Ended here means the machine has since moved on to other work; new checkpoints can't be added to a run once it's ended.</div>
+
+    <div class="fpi-section-label">Ended Run</div>
+    <select id="ipih_run_select" style="width:100%; max-width:520px; padding:10px 12px; border:1px solid var(--line-strong); border-radius:6px; font-size:15px; margin-bottom:14px;"><option value="">Select an ended run…</option></select>
+
+    <div class="fpi-fieldgrid" id="ipih_run_header" style="display:none;">
+      <div class="fpi-field"><label id="ipih_h_item_label">Item Code</label><input readonly id="ipih_h_item"/></div>
+      <div class="fpi-field"><label>Material</label><input readonly id="ipih_h_material"/></div>
+      <div class="fpi-field"><label>Colour</label><input readonly id="ipih_h_colour"/></div>
+      <div class="fpi-field"><label>Customer</label><input readonly id="ipih_h_customer"/></div>
+      <div class="fpi-field"><label>Machine</label><input readonly id="ipih_h_machine"/></div>
+      <div class="fpi-field"><label>Cavity</label><input readonly id="ipih_h_cavity"/></div>
+    </div>
+
+    <div style="display:flex; align-items:center; justify-content:space-between; margin:26px 0 10px; gap:8px; flex-wrap:wrap;">
+      <div class="fpi-section-label" style="margin:0; flex:1;">Run log</div>
+      <button type="button" class="fpi-btn ghost" id="ipih_export_full_btn" style="padding:6px 14px; font-size:12px;">Export Full CSV</button>
+      <button type="button" class="fpi-btn ghost" id="ipih_export_btn" style="padding:6px 14px; font-size:12px;">Export Part Info CSV</button>
+    </div>
+    <div id="ipih_log"></div>
   </div>
 
   <div class="fpi-panel" id="fpi-panel-lists" style="display:none;">
@@ -1503,11 +1524,13 @@
       document.getElementById('fpi-panel-new').style.display = which==='new' ? '' : 'none';
       document.getElementById('fpi-panel-records').style.display = which==='records' ? '' : 'none';
       document.getElementById('fpi-panel-ipi').style.display = which==='ipi' ? '' : 'none';
+      document.getElementById('fpi-panel-ipihistory').style.display = which==='ipihistory' ? '' : 'none';
       document.getElementById('fpi-panel-lists').style.display = which==='lists' ? '' : 'none';
       document.getElementById('fpi-panel-auditlog').style.display = which==='auditlog' ? '' : 'none';
       document.getElementById('fpi-panel-dashboard').style.display = which==='dashboard' ? '' : 'none';
       if(which==='records') loadRecords();
       if(which==='ipi') ipiLoadRuns();
+      if(which==='ipihistory') ipihLoadRuns();
       if(which==='lists'){ renderAllListManagers(); renderUserPins(); }
       if(which==='auditlog') loadAuditLog();
       if(which==='dashboard') loadDashboard();
@@ -2601,42 +2624,40 @@
   let ipiEditingOriginal = null; // the full row {id, checked_at, inspector, overall_result, data} being corrected
   const IPI_TOLERANCE_PCT = 5;
 
-  // A machine can only run one job at a time, so by default the picker shows at most one run
-  // per machine — the most recent FPI record for it, unless marked "ended" via End Run, in
-  // which case that machine has no active run until a fresh FPI is filed. Checking "Show ended
-  // runs too" switches to full history mode instead: every run, active or ended, so past
-  // production can still be retrieved for viewing/export.
+  // Shared by the In-Process tab's active-run picker and the IPI History tab's ended-run
+  // picker — one fetch of recent FPI records plus every recorded ipi_run_status, so each tab
+  // can filter/group the same raw data differently instead of duplicating the round trip.
+  async function ipiFetchRunsAndEndedSet_(){
+    const [runRows, statusRows] = await Promise.all([
+      sbFetch_('fpi_records?select=id,run_id,item_code,mould_ref,machine,mixed_mode,submitted_at&order=submitted_at.desc&limit=300'),
+      sbFetch_('app_settings?select=key,value&key=like.ipi_run_status:*')
+    ]);
+    const endedRunIds = new Set((statusRows||[]).filter(s=>s.value==='ended').map(s=> s.key.slice('ipi_run_status:'.length)));
+    return { runRows: runRows||[], endedRunIds };
+  }
+
+  // A machine can only run one job at a time, so the picker shows at most one run per machine —
+  // the most recent FPI record for it, unless marked "ended" via End Run, in which case that
+  // machine has no active run until a fresh FPI is filed.
   async function ipiLoadRuns(){
     const sel = document.getElementById('ipi_run_select');
-    const showEnded = document.getElementById('ipi_show_ended').checked;
     const prevValue = sel.value;
     try{
-      const [runRows, statusRows] = await Promise.all([
-        sbFetch_('fpi_records?select=id,run_id,item_code,mould_ref,machine,mixed_mode,submitted_at&order=submitted_at.desc&limit=300'),
-        sbFetch_('app_settings?select=key,value&key=like.ipi_run_status:*')
-      ]);
-      const endedRunIds = new Set((statusRows||[]).filter(s=>s.value==='ended').map(s=> s.key.slice('ipi_run_status:'.length)));
-
-      if(showEnded){
-        ipiRunsCache = (runRows||[]).map(r=> Object.assign({}, r, { ended: endedRunIds.has(r.run_id) }));
-      } else {
-        const latestByMachine = {};
-        (runRows||[]).forEach(r=>{
-          if(!(r.machine in latestByMachine)) latestByMachine[r.machine] = r; // rows already sorted newest-first
-        });
-        ipiRunsCache = Object.values(latestByMachine)
-          .filter(r=> !endedRunIds.has(r.run_id))
-          .map(r=> Object.assign({}, r, { ended:false }))
-          .sort((a,b)=> (parseFloat(a.machine)||0) - (parseFloat(b.machine)||0));
-      }
-      const placeholder = showEnded ? 'Select a run…' : 'Select the active run this belongs to…';
-      sel.innerHTML = `<option value="">${placeholder}</option>` + ipiRunsCache.map(r=>{
-        const label = 'M' + r.machine + ' — ' + (r.mixed_mode ? r.mould_ref : r.item_code) + (r.ended ? ' (ended)' : '') + ' · ' + formatLocalDate_(r.submitted_at);
+      const { runRows, endedRunIds } = await ipiFetchRunsAndEndedSet_();
+      const latestByMachine = {};
+      runRows.forEach(r=>{
+        if(!(r.machine in latestByMachine)) latestByMachine[r.machine] = r; // rows already sorted newest-first
+      });
+      ipiRunsCache = Object.values(latestByMachine)
+        .filter(r=> !endedRunIds.has(r.run_id))
+        .sort((a,b)=> (parseFloat(a.machine)||0) - (parseFloat(b.machine)||0));
+      sel.innerHTML = '<option value="">Select the active run this belongs to…</option>' + ipiRunsCache.map(r=>{
+        const label = 'M' + r.machine + ' — ' + (r.mixed_mode ? r.mould_ref : r.item_code);
         return `<option value="${escapeHtml(r.id)}">${escapeHtml(label)}</option>`;
       }).join('');
-      if(!ipiRunsCache.length) sel.innerHTML = `<option value="">${showEnded ? 'No FPI runs found' : 'No active runs — every machine is idle or ended'}</option>`;
+      if(!ipiRunsCache.length) sel.innerHTML = '<option value="">No active runs — every machine is idle or ended</option>';
       if(prevValue && ipiRunsCache.some(r=>r.id===prevValue)) sel.value = prevValue;
-    }catch(e){ console.error(e); toast('Could not load runs.'); }
+    }catch(e){ console.error(e); toast('Could not load active runs.'); }
   }
 
   // Mean of the 5 sample values from an FPI shared-item or checklist-row `samples` object —
@@ -2877,7 +2898,7 @@
         el.addEventListener('mouseleave', ()=> el.style.background='');
         el.addEventListener('click', ()=>{
           const row = ipiLogRowsCache.find(x=>x.id===el.dataset.rowid);
-          if(row) ipiOpenDetail(row);
+          if(row) ipiOpenDetail(row, ipiSelectedRunData);
         });
       });
     }catch(e){
@@ -2888,13 +2909,17 @@
 
   // Full detail view for one logged checkpoint — same modal shape as FPI's own openDetail, so a
   // checkpoint reads the same way a saved FPI record does: header info, shared measurements,
-  // then a full item-by-item checklist per product with all 5 sample readings.
-  function ipiOpenDetail(row, readonly, bannerText){
+  // then a full item-by-item checklist per product with all 5 sample readings. runHeaderData is
+  // passed in explicitly (not read from a module var) so this can be reused from any tab that
+  // has its own separately-loaded run — the In-Process tab and the IPI History tab both call it.
+  function ipiOpenDetail(row, runHeaderData, opts){
+    opts = opts || {};
+    const allowEdit = opts.allowEdit !== false && !opts.archived;
     const d = row.data || {};
-    const runHeader = ipiSelectedRunData || {};
+    const runHeader = runHeaderData || {};
     const backdrop = document.createElement('div');
     backdrop.className = 'fpi-modal-backdrop';
-    const archivedBanner = readonly ? `<div style="background:#f3f1fa; border:1px solid #8b7fc9; color:#6b5fa8; border-radius:6px; padding:8px 12px; font-size:11.5px; margin-bottom:10px;">${escapeHtml(bannerText || 'Showing this checkpoint as it was before a later correction.')}</div>` : '';
+    const archivedBanner = opts.archived ? `<div style="background:#f3f1fa; border:1px solid #8b7fc9; color:#6b5fa8; border-radius:6px; padding:8px 12px; font-size:11.5px; margin-bottom:10px;">${escapeHtml(opts.bannerText || 'Showing this checkpoint as it was before a later correction.')}</div>` : '';
     const headerGrid = `
       <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:8px 16px; background:#fbfaf7; border:1px solid var(--line); border-radius:8px; padding:12px 14px; margin-bottom:14px; font-size:12.5px;">
         <div><b style="display:block;font-size:10px;text-transform:uppercase;color:#8a8d87;letter-spacing:.05em;">Material</b>${escapeHtml(runHeader.material)||'—'}</div>
@@ -2946,7 +2971,7 @@
       </div>` : '';
     backdrop.innerHTML = `<div class="fpi-modal">
       <button class="fpi-btn ghost fpi-modal-close" id="ipi-modal-close">Close</button>
-      ${readonly ? '' : `<button class="fpi-btn ghost" id="ipi-modal-edit" style="float:right; margin-right:8px;">Edit / Correct</button>`}
+      ${allowEdit ? `<button class="fpi-btn ghost" id="ipi-modal-edit" style="float:right; margin-right:8px;">Edit / Correct</button>` : ''}
       <h3>${escapeHtml(runHeader.mixedMode ? runHeader.mouldRef : runHeader.itemCode)} ${d.editHistory && d.editHistory.length ? '<span style="font-size:10.5px; color:var(--amber); font-weight:700; vertical-align:middle;">EDITED</span>' : ''}</h3>
       <div style="font-size:12px;color:#7a7d78;margin-bottom:10px;">Run ID ${escapeHtml(d.runId)} · Checked ${new Date(row.checked_at).toLocaleString()}</div>
       ${archivedBanner}
@@ -2964,23 +2989,17 @@
         const h = d.editHistory[parseInt(btn.dataset.historyIndex)];
         if(h && h.previousSnapshot){
           const oldRow = Object.assign({}, row, { data: h.previousSnapshot, overall_result: h.previousSnapshot.overallResult, inspector: h.previousSnapshot.inspector, checked_at: h.previousSnapshot.checkedAt });
-          ipiOpenDetail(oldRow, true, 'Showing this checkpoint as it was before this correction was made — not the current version.');
+          ipiOpenDetail(oldRow, runHeaderData, { archived:true, bannerText: 'Showing this checkpoint as it was before this correction was made — not the current version.' });
         }
       });
     });
-    if(!readonly){
+    if(allowEdit){
       backdrop.querySelector('#ipi-modal-edit').addEventListener('click', ()=>{
         backdrop.remove();
         ipiStartEdit(row);
       });
     }
   }
-
-  document.getElementById('ipi_show_ended').addEventListener('change', ()=>{
-    document.getElementById('ipi_run_select').value = '';
-    document.getElementById('ipi_run_select').dispatchEvent(new Event('change', {bubbles:true}));
-    ipiLoadRuns();
-  });
 
   document.getElementById('ipi_run_select').addEventListener('change', async (e)=>{
     const id = e.target.value;
@@ -3003,22 +3022,13 @@
     if(!ipiSelectedRunData){ formWrap.style.display = 'none'; return; }
 
     ipiRenderHeader();
-    if(ipiSelectedRun.ended){
-      // Ended runs are for retrieval only — no new checkpoints, no End run control.
-      formWrap.style.display = 'none';
-      endBtn.style.display = 'none';
-      statusBadge.style.display = '';
-      statusBadge.className = 'fpi-badge pending';
-      statusBadge.textContent = 'Ended';
-    } else {
-      ipiCavityOverrides = {};
-      formWrap.style.display = '';
-      endBtn.style.display = '';
-      ipiResetChecklist();
-      ipiResetSharedBlock();
-      document.getElementById('ipi_remarks').value = '';
-      ipiShowRunActive();
-    }
+    ipiCavityOverrides = {};
+    formWrap.style.display = '';
+    endBtn.style.display = '';
+    ipiResetChecklist();
+    ipiResetSharedBlock();
+    document.getElementById('ipi_remarks').value = '';
+    ipiShowRunActive();
     await ipiLoadLog();
   });
 
@@ -3331,6 +3341,122 @@
     if(!ipiLogRowsCache.length){ toast('No checkpoints to export for this run yet.'); return; }
     const filenameSafe = (ipiSelectedRun.run_id || 'ipi_run').replace(/[^a-z0-9_-]+/gi, '_');
     await saveFile(`ipi_partinfo_${filenameSafe}.csv`, 'text/csv;charset=utf-8;', ipiToPartInfoCsv(ipiLogRowsCache));
+  });
+
+  // ==========================================================================
+  // IPI History — a separate tab, not a toggle inside In-Process, for retrieving concluded
+  // runs. Reuses ipiFetchRunsAndEndedSet_, ipiOpenDetail, ipiToFullCsv/ipiToPartInfoCsv from
+  // above; keeps its own state (ipih*) so selecting a run here never touches the In-Process
+  // tab's own selection.
+  // ==========================================================================
+  let ipihRunsCache = [];
+  let ipihSelectedRun = null;
+  let ipihSelectedRunData = null;
+  let ipihLogRowsCache = [];
+
+  async function ipihLoadRuns(){
+    const sel = document.getElementById('ipih_run_select');
+    const prevValue = sel.value;
+    try{
+      const { runRows, endedRunIds } = await ipiFetchRunsAndEndedSet_();
+      ipihRunsCache = runRows.filter(r=> endedRunIds.has(r.run_id));
+      sel.innerHTML = '<option value="">Select an ended run…</option>' + ipihRunsCache.map(r=>{
+        const label = 'M' + r.machine + ' — ' + (r.mixed_mode ? r.mould_ref : r.item_code) + ' · ' + formatLocalDate_(r.submitted_at);
+        return `<option value="${escapeHtml(r.id)}">${escapeHtml(label)}</option>`;
+      }).join('');
+      if(!ipihRunsCache.length) sel.innerHTML = '<option value="">No ended runs yet</option>';
+      if(prevValue && ipihRunsCache.some(r=>r.id===prevValue)) sel.value = prevValue;
+    }catch(e){ console.error(e); toast('Could not load ended runs.'); }
+  }
+
+  function ipihRenderHeader(){
+    const d = ipihSelectedRunData;
+    document.getElementById('ipih_h_item_label').textContent = d.mixedMode ? 'Mould / Job Reference' : 'Item Code';
+    document.getElementById('ipih_h_item').value = (d.mixedMode ? d.mouldRef : d.itemCode) || '';
+    document.getElementById('ipih_h_material').value = d.material || '';
+    document.getElementById('ipih_h_colour').value = d.colour || '';
+    document.getElementById('ipih_h_customer').value = d.customer || '';
+    document.getElementById('ipih_h_machine').value = d.machine || '';
+    document.getElementById('ipih_h_cavity').value = d.nosCavity || '';
+    document.getElementById('ipih_run_header').style.display = '';
+  }
+
+  async function ipihLoadLog(){
+    const logEl = document.getElementById('ipih_log');
+    logEl.innerHTML = '<div class="fpi-empty">Loading…</div>';
+    try{
+      const rows = await sbFetch_(`ipi_records?run_id=eq.${encodeURIComponent(ipihSelectedRun.run_id)}&select=id,checked_at,inspector,overall_result,data&order=checked_at.desc`);
+      ipihLogRowsCache = rows;
+      if(!rows.length){
+        logEl.innerHTML = '<div class="fpi-empty">No checkpoints were logged for this run.</div>';
+        return;
+      }
+      const groups = {}; const order = [];
+      rows.forEach(r=>{
+        const day = formatLocalDate_(r.checked_at);
+        if(!groups[day]){ groups[day]=[]; order.push(day); }
+        groups[day].push(r);
+      });
+      logEl.innerHTML = order.map(day=>{
+        const items = groups[day].map(r=>{
+          const isNg = r.overall_result && r.overall_result.indexOf('NG')>=0;
+          const bg = isNg ? 'var(--ng-bg)' : 'var(--ok-bg)';
+          const col = isNg ? 'var(--ng)' : 'var(--ok)';
+          const time = new Date(r.checked_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+          const product = r.data && r.data.blocks && r.data.blocks.length>1 ? ' · ' + r.data.blocks.map(b=>escapeHtml(b.itemCode)).join(', ') : '';
+          const cavFlags = (r.data && r.data.blocks || []).filter(b=> b.originalCavity && String(b.cavitiesRunning)!==String(b.originalCavity))
+            .map(b=> `${escapeHtml(b.itemCode)} ${escapeHtml(b.cavitiesRunning)}/${escapeHtml(b.originalCavity)}`);
+          const cavityFlag = cavFlags.length ? ` <span style="color:var(--amber); font-weight:700;">⚠ ${cavFlags.join(', ')} cav</span>` : '';
+          const editedTag = r.data && r.data.editHistory && r.data.editHistory.length ? ' <span style="font-size:9.5px;color:var(--amber);font-weight:700;">EDITED</span>' : '';
+          return `<div data-rowid="${escapeHtml(r.id)}" style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font-size:12.5px; margin-bottom:6px; cursor:pointer;">
+            <span>${escapeHtml(time)} · ${escapeHtml(r.inspector||'—')}${product}${cavityFlag}${editedTag}</span>
+            <span style="font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px; background:${bg}; color:${col};">${escapeHtml(r.overall_result||'—')}</span>
+          </div>`;
+        }).join('');
+        return `<div style="font-size:11.5px; color:#7a7d78; margin:10px 0 4px;">${escapeHtml(day)}</div>${items}`;
+      }).join('');
+      logEl.querySelectorAll('[data-rowid]').forEach(el=>{
+        el.addEventListener('mouseenter', ()=> el.style.background='#fbfaf7');
+        el.addEventListener('mouseleave', ()=> el.style.background='');
+        el.addEventListener('click', ()=>{
+          const row = ipihLogRowsCache.find(x=>x.id===el.dataset.rowid);
+          if(row) ipiOpenDetail(row, ipihSelectedRunData, { allowEdit:false });
+        });
+      });
+    }catch(e){
+      console.error(e);
+      logEl.innerHTML = '<div class="fpi-empty">Could not load the run log.</div>';
+    }
+  }
+
+  document.getElementById('ipih_run_select').addEventListener('change', async (e)=>{
+    const id = e.target.value;
+    ipihSelectedRun = ipihRunsCache.find(r=>r.id===id) || null;
+    const headerEl = document.getElementById('ipih_run_header');
+    if(!ipihSelectedRun){
+      ipihSelectedRunData = null;
+      headerEl.style.display = 'none';
+      document.getElementById('ipih_log').innerHTML = '';
+      return;
+    }
+    try{
+      const rows = await sbFetch_(`fpi_records?id=eq.${encodeURIComponent(ipihSelectedRun.id)}&select=data`);
+      ipihSelectedRunData = rows && rows[0] ? rows[0].data : null;
+    }catch(err){ console.error(err); toast('Could not load the FPI record for this run.'); ipihSelectedRunData = null; }
+    if(!ipihSelectedRunData) return;
+    ipihRenderHeader();
+    await ipihLoadLog();
+  });
+
+  document.getElementById('ipih_export_full_btn').addEventListener('click', async ()=>{
+    if(!ipihLogRowsCache.length){ toast('No checkpoints to export for this run.'); return; }
+    const filenameSafe = (ipihSelectedRun.run_id || 'ipi_run').replace(/[^a-z0-9_-]+/gi, '_');
+    await saveFile(`ipi_full_${filenameSafe}.csv`, 'text/csv;charset=utf-8;', ipiToFullCsv(ipihLogRowsCache));
+  });
+  document.getElementById('ipih_export_btn').addEventListener('click', async ()=>{
+    if(!ipihLogRowsCache.length){ toast('No checkpoints to export for this run.'); return; }
+    const filenameSafe = (ipihSelectedRun.run_id || 'ipi_run').replace(/[^a-z0-9_-]+/gi, '_');
+    await saveFile(`ipi_partinfo_${filenameSafe}.csv`, 'text/csv;charset=utf-8;', ipiToPartInfoCsv(ipihLogRowsCache));
   });
 })();
 </script>
