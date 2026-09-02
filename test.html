@@ -26,6 +26,9 @@
   .fpi-tabs{ display:flex; gap:2px; background:var(--navy-2); padding:0 22px; }
   .fpi-tab{ padding:13px 16px; font-size:13px; font-weight:600; color:#c7d3d2; cursor:pointer; border-bottom:3px solid transparent; user-select:none; touch-action:manipulation; }
   .fpi-tab.active{ color:#fff; border-bottom-color:#7fb8a8; }
+  /* Groups the two IPI tabs visually so they read as one related pair, not two more items
+     in a flat list — same tab styling underneath, just a shared tint and tighter spacing. */
+  .fpi-tabgroup-ipi{ display:flex; gap:1px; margin:0 4px; background:rgba(127,184,168,0.12); border-radius:6px 6px 0 0; }
   .fpi-panel{ background:var(--panel); border:1px solid var(--line); border-top:none; border-radius:0 0 10px 10px; padding:20px 22px 26px; }
   .fpi-fieldgrid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:12px; margin-bottom:22px; }
   .fpi-field label{ display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:#6b6f6a; margin-bottom:4px; }
@@ -165,19 +168,21 @@
 <div id="fpi-root">
   <div class="fpi-topbar">
     <div class="co">RB Diversified Sdn Bhd</div>
-    <h1>First Piece Inspection Check List</h1>
-    <div class="fpi-docstrip">
-      <div>Doc No. <b>RB-P03-04 (Rev00)</b></div>
-      <div>Eff. Date <b>1 Jul 2023</b></div>
-      <div>Basis <b>5-piece sample from Production</b></div>
+    <h1 id="fpi-h1">First Piece Inspection Check List</h1>
+    <div class="fpi-docstrip" id="fpi-docstrip">
+      <div>Doc No. <b id="fpi-docno">RB-P03-04 (Rev00)</b></div>
+      <div>Eff. Date <b id="fpi-effdate">1 Jul 2023</b></div>
+      <div>Basis <b id="fpi-basis">5-piece sample from Production</b></div>
     </div>
     <div class="fpi-runid" id="fpi-runid-display">Run ID: —</div>
   </div>
   <div class="fpi-tabs">
     <div class="fpi-tab active" data-tab="new">New Inspection</div>
     <div class="fpi-tab" data-tab="records">Records <span id="fpi-rec-count" class="stamp"></span></div>
-    <div class="fpi-tab" data-tab="ipi">In-Process</div>
-    <div class="fpi-tab" data-tab="ipihistory">IPI History</div>
+    <div class="fpi-tabgroup-ipi">
+      <div class="fpi-tab" data-tab="ipi">In-Process</div>
+      <div class="fpi-tab" data-tab="ipihistory">IPI History</div>
+    </div>
     <div class="fpi-tab" data-tab="dashboard">Dashboard</div>
     <div class="fpi-tab" data-tab="lists" id="fpi-tab-lists" style="display:none;">Manage Lists</div>
     <div class="fpi-tab" data-tab="auditlog" id="fpi-tab-auditlog" style="display:none;">Deletion Log</div>
@@ -854,7 +859,12 @@
     if(!identifier || !machine) return null;
     return `${identifier}-${dateStr}-${machine}`.replace(/\s+/g,'-');
   }
+  // Only writes the New Inspection form's live Run ID when that tab is actually the one showing
+  // — otherwise typing in the (hidden) New Inspection fields would stomp on whatever the IPI
+  // tabs' Run ID banner is currently displaying.
   function refreshRunIdDisplay(){
+    const newTab = document.querySelector('.fpi-tab[data-tab="new"]');
+    if(!newTab || !newTab.classList.contains('active')) return;
     const id = computeRunId();
     document.getElementById('fpi-runid-display').textContent = 'Run ID: ' + (id || (mixedMode ? '(fill Mould Ref + Machine)' : '(fill Item Code + Machine)'));
   }
@@ -863,7 +873,44 @@
     el.addEventListener('input', refreshRunIdDisplay);
     el.addEventListener('change', refreshRunIdDisplay);
   });
-  refreshRunIdDisplay();
+
+  // The top banner (title, doc-control strip, Run ID) used to be one static FPI-only block
+  // shown above every tab — now that the app also covers In-Process Inspection (its own real
+  // SOP doc, RB-P03-06), it switches per active tab instead of always showing FPI's own info.
+  const TOPBAR_CONFIG = {
+    new:        { h1:'First Piece Inspection Check List', docNo:'RB-P03-04 (Rev00)', effDate:'1 Jul 2023', basis:'5-piece sample from Production', docVisible:true, runId:'new' },
+    records:    { h1:'First Piece Inspection — Records', docNo:'RB-P03-04 (Rev00)', effDate:'1 Jul 2023', basis:'5-piece sample from Production', docVisible:true, runId:false },
+    ipi:        { h1:'In-Process Sample Inspection', docNo:'RB-P03-06 (Rev00)', effDate:'1 Jul 2023', basis:'Periodic in-line sampling — checklist same as FPI', docVisible:true, runId:'ipi' },
+    ipihistory: { h1:'In-Process Sample Inspection — History', docNo:'RB-P03-06 (Rev00)', effDate:'1 Jul 2023', basis:'Periodic in-line sampling — checklist same as FPI', docVisible:true, runId:'ipihistory' },
+    dashboard:  { h1:'Quality Dashboard', docVisible:false, runId:false },
+    lists:      { h1:'Manage Lists & Security', docVisible:false, runId:false },
+    auditlog:   { h1:'Deletion Log', docVisible:false, runId:false }
+  };
+  function updateTopbarForTab(which){
+    const cfg = TOPBAR_CONFIG[which] || TOPBAR_CONFIG.new;
+    document.title = cfg.h1;
+    document.getElementById('fpi-h1').textContent = cfg.h1;
+    document.getElementById('fpi-docstrip').style.display = cfg.docVisible ? '' : 'none';
+    if(cfg.docVisible){
+      document.getElementById('fpi-docno').textContent = cfg.docNo;
+      document.getElementById('fpi-effdate').textContent = cfg.effDate;
+      document.getElementById('fpi-basis').textContent = cfg.basis;
+    }
+    const runIdEl = document.getElementById('fpi-runid-display');
+    if(cfg.runId === 'new'){
+      runIdEl.style.display = '';
+      refreshRunIdDisplay();
+    } else if(cfg.runId === 'ipi'){
+      runIdEl.style.display = '';
+      runIdEl.textContent = 'Run ID: ' + (typeof ipiSelectedRun !== 'undefined' && ipiSelectedRun ? ipiSelectedRun.run_id : '(select a run above)');
+    } else if(cfg.runId === 'ipihistory'){
+      runIdEl.style.display = '';
+      runIdEl.textContent = 'Run ID: ' + (typeof ipihSelectedRun !== 'undefined' && ipihSelectedRun ? ipihSelectedRun.run_id : '(select a run above)');
+    } else {
+      runIdEl.style.display = 'none';
+    }
+  }
+  updateTopbarForTab('new');
   document.getElementById('f_itemcode').addEventListener('change', (e)=>{
     if(!mixedMode && blocks.length && blocks[0].key==='main'){
       blocks[0].wrap.querySelector('.fpi-block-title').textContent = e.target.value.trim() || '(item code)';
@@ -1521,6 +1568,7 @@
       document.querySelectorAll('.fpi-tab').forEach(t=>t.classList.remove('active'));
       tab.classList.add('active');
       const which = tab.dataset.tab;
+      updateTopbarForTab(which);
       document.getElementById('fpi-panel-new').style.display = which==='new' ? '' : 'none';
       document.getElementById('fpi-panel-records').style.display = which==='records' ? '' : 'none';
       document.getElementById('fpi-panel-ipi').style.display = which==='ipi' ? '' : 'none';
@@ -3004,6 +3052,7 @@
   document.getElementById('ipi_run_select').addEventListener('change', async (e)=>{
     const id = e.target.value;
     ipiSelectedRun = ipiRunsCache.find(r=>r.id===id) || null;
+    updateTopbarForTab('ipi');
     const headerEl = document.getElementById('ipi_run_header');
     const formWrap = document.getElementById('ipi_form_wrap');
     const endBtn = document.getElementById('ipi_end_run_btn');
@@ -3432,6 +3481,7 @@
   document.getElementById('ipih_run_select').addEventListener('change', async (e)=>{
     const id = e.target.value;
     ipihSelectedRun = ipihRunsCache.find(r=>r.id===id) || null;
+    updateTopbarForTab('ipihistory');
     const headerEl = document.getElementById('ipih_run_header');
     if(!ipihSelectedRun){
       ipihSelectedRunData = null;
