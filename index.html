@@ -26,6 +26,9 @@
   .fpi-tabs{ display:flex; gap:2px; background:var(--navy-2); padding:0 22px; }
   .fpi-tab{ padding:13px 16px; font-size:13px; font-weight:600; color:#c7d3d2; cursor:pointer; border-bottom:3px solid transparent; user-select:none; touch-action:manipulation; }
   .fpi-tab.active{ color:#fff; border-bottom-color:#7fb8a8; }
+  /* Groups the two IPI tabs visually so they read as one related pair, not two more items
+     in a flat list — same tab styling underneath, just a shared tint and tighter spacing. */
+  .fpi-tabgroup-ipi{ display:flex; gap:1px; margin:0 4px; background:rgba(127,184,168,0.12); border-radius:6px 6px 0 0; }
   .fpi-panel{ background:var(--panel); border:1px solid var(--line); border-top:none; border-radius:0 0 10px 10px; padding:20px 22px 26px; }
   .fpi-fieldgrid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:12px; margin-bottom:22px; }
   .fpi-field label{ display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:#6b6f6a; margin-bottom:4px; }
@@ -165,17 +168,21 @@
 <div id="fpi-root">
   <div class="fpi-topbar">
     <div class="co">RB Diversified Sdn Bhd</div>
-    <h1>First Piece Inspection Check List</h1>
-    <div class="fpi-docstrip">
-      <div>Doc No. <b>RB-P03-04 (Rev00)</b></div>
-      <div>Eff. Date <b>1 Jul 2023</b></div>
-      <div>Basis <b>5-piece sample from Production</b></div>
+    <h1 id="fpi-h1">First Piece Inspection Check List</h1>
+    <div class="fpi-docstrip" id="fpi-docstrip">
+      <div>Doc No. <b id="fpi-docno">RB-P03-04 (Rev00)</b></div>
+      <div>Eff. Date <b id="fpi-effdate">1 Jul 2023</b></div>
+      <div>Basis <b id="fpi-basis">5-piece sample from Production</b></div>
     </div>
     <div class="fpi-runid" id="fpi-runid-display">Run ID: —</div>
   </div>
   <div class="fpi-tabs">
     <div class="fpi-tab active" data-tab="new">New Inspection</div>
     <div class="fpi-tab" data-tab="records">Records <span id="fpi-rec-count" class="stamp"></span></div>
+    <div class="fpi-tabgroup-ipi">
+      <div class="fpi-tab" data-tab="ipi">In-Process</div>
+      <div class="fpi-tab" data-tab="ipihistory">IPI History</div>
+    </div>
     <div class="fpi-tab" data-tab="dashboard">Dashboard</div>
     <div class="fpi-tab" data-tab="lists" id="fpi-tab-lists" style="display:none;">Manage Lists</div>
     <div class="fpi-tab" data-tab="auditlog" id="fpi-tab-auditlog" style="display:none;">Deletion Log</div>
@@ -274,6 +281,82 @@
       <button class="fpi-btn primary" id="fpi-rec-batchreview" style="padding:8px 16px; font-size:12.5px;">Mark Selected as Reviewed</button>
     </div>
     <div id="fpi-rec-list"></div>
+  </div>
+
+  <div class="fpi-panel" id="fpi-panel-ipi" style="display:none;">
+    <div class="fpi-recnote" style="margin-bottom:14px;">Checks the same items as First Piece Inspection. Pick the run this belongs to, then log a checkpoint — aim for at least twice a day until the run ends.</div>
+
+    <div class="fpi-section-label">Run</div>
+    <div style="display:flex; gap:10px; align-items:center; margin-bottom:6px; flex-wrap:wrap;">
+      <select id="ipi_run_select" style="flex:1; min-width:240px; padding:10px 12px; border:1px solid var(--line-strong); border-radius:6px; font-size:15px;"><option value="">Select the active run this belongs to…</option></select>
+      <span id="ipi_run_status_badge" class="fpi-badge pending" style="display:none;"></span>
+      <button type="button" class="fpi-btn ghost" id="ipi_end_run_btn" style="display:none; padding:8px 14px; font-size:12px;">End run</button>
+    </div>
+    <div class="fpi-fieldgrid" id="ipi_run_header" style="display:none;">
+      <div class="fpi-field"><label id="ipi_h_item_label">Item Code</label><input readonly id="ipi_h_item"/></div>
+      <div class="fpi-field"><label>Material</label><input readonly id="ipi_h_material"/></div>
+      <div class="fpi-field"><label>Colour</label><input readonly id="ipi_h_colour"/></div>
+      <div class="fpi-field"><label>Customer</label><input readonly id="ipi_h_customer"/></div>
+      <div class="fpi-field"><label>Machine</label><input readonly id="ipi_h_machine"/></div>
+      <div class="fpi-field"><label>Cavity</label><input readonly id="ipi_h_cavity"/></div>
+    </div>
+
+    <div id="ipi_form_wrap" style="display:none;">
+      <div id="ipi-edit-banner" style="display:none; background:var(--amber-bg); border:1px solid var(--amber); border-radius:8px; padding:10px 14px; margin-bottom:16px; font-size:12.5px;">
+        <div style="font-weight:700; color:var(--amber); margin-bottom:6px;">Correcting a logged checkpoint — the original is kept in its edit history, not deleted.</div>
+        <input id="ipi-edit-pin" type="password" placeholder="Your personal PIN (required)" style="width:100%; padding:7px 9px; border:1px solid var(--line-strong); border-radius:6px; font-size:12.5px; margin-bottom:6px;"/>
+        <input id="ipi-edit-reason" placeholder="Reason for this correction (required)" style="width:100%; padding:7px 9px; border:1px solid var(--line-strong); border-radius:6px; font-size:12.5px; margin-bottom:6px;"/>
+        <button type="button" class="fpi-btn ghost" id="ipi-edit-cancel" style="padding:5px 12px; font-size:11.5px;">Cancel correction</button>
+      </div>
+
+      <div class="fpi-section-label">Shared shot measurements</div>
+      <div class="fpi-recnote" style="margin-bottom:6px;">Reference line under each item shows the mean from the linked FPI record — flags in red if this checkpoint's readings drift more than 5% from it.</div>
+      <div id="ipi_shared_block"></div>
+
+      <div class="fpi-section-label">Defect Check List — same items as FPI</div>
+      <div class="fpi-recnote" style="margin-bottom:6px;">Mixed-mould runs show one checklist per product/cavity from the FPI record — fill in whichever ones you're checking this round.</div>
+      <div id="ipi_checklist_container"></div>
+
+      <div class="fpi-section-label">Remarks</div>
+      <div class="fpi-remarks"><textarea id="ipi_remarks" placeholder="Any additional notes about this checkpoint..."></textarea></div>
+
+      <div class="fpi-footerbar">
+        <div class="fpi-overall" style="font-size:12.5px; color:#7a7d78;">Checkpoint result shown in each checklist heading above.</div>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <button type="button" class="fpi-btn primary" id="ipi_save_btn">Log checkpoint</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex; align-items:center; justify-content:space-between; margin:26px 0 10px; gap:8px; flex-wrap:wrap;">
+      <div class="fpi-section-label" style="margin:0; flex:1;">Run log</div>
+      <button type="button" class="fpi-btn ghost" id="ipi_export_full_btn" style="padding:6px 14px; font-size:12px;">Export Full CSV</button>
+      <button type="button" class="fpi-btn ghost" id="ipi_export_btn" style="padding:6px 14px; font-size:12px;">Export Part Info CSV</button>
+    </div>
+    <div id="ipi_log"></div>
+  </div>
+
+  <div class="fpi-panel" id="fpi-panel-ipihistory" style="display:none;">
+    <div class="fpi-recnote" style="margin-bottom:14px;">Concluded production runs — retrieve and export past In-Process Inspection checkpoints. Ended here means the machine has since moved on to other work; new checkpoints can't be added to a run once it's ended.</div>
+
+    <div class="fpi-section-label">Ended Run</div>
+    <select id="ipih_run_select" style="width:100%; max-width:520px; padding:10px 12px; border:1px solid var(--line-strong); border-radius:6px; font-size:15px; margin-bottom:14px;"><option value="">Select an ended run…</option></select>
+
+    <div class="fpi-fieldgrid" id="ipih_run_header" style="display:none;">
+      <div class="fpi-field"><label id="ipih_h_item_label">Item Code</label><input readonly id="ipih_h_item"/></div>
+      <div class="fpi-field"><label>Material</label><input readonly id="ipih_h_material"/></div>
+      <div class="fpi-field"><label>Colour</label><input readonly id="ipih_h_colour"/></div>
+      <div class="fpi-field"><label>Customer</label><input readonly id="ipih_h_customer"/></div>
+      <div class="fpi-field"><label>Machine</label><input readonly id="ipih_h_machine"/></div>
+      <div class="fpi-field"><label>Cavity</label><input readonly id="ipih_h_cavity"/></div>
+    </div>
+
+    <div style="display:flex; align-items:center; justify-content:space-between; margin:26px 0 10px; gap:8px; flex-wrap:wrap;">
+      <div class="fpi-section-label" style="margin:0; flex:1;">Run log</div>
+      <button type="button" class="fpi-btn ghost" id="ipih_export_full_btn" style="padding:6px 14px; font-size:12px;">Export Full CSV</button>
+      <button type="button" class="fpi-btn ghost" id="ipih_export_btn" style="padding:6px 14px; font-size:12px;">Export Part Info CSV</button>
+    </div>
+    <div id="ipih_log"></div>
   </div>
 
   <div class="fpi-panel" id="fpi-panel-lists" style="display:none;">
@@ -776,7 +859,12 @@
     if(!identifier || !machine) return null;
     return `${identifier}-${dateStr}-${machine}`.replace(/\s+/g,'-');
   }
+  // Only writes the New Inspection form's live Run ID when that tab is actually the one showing
+  // — otherwise typing in the (hidden) New Inspection fields would stomp on whatever the IPI
+  // tabs' Run ID banner is currently displaying.
   function refreshRunIdDisplay(){
+    const newTab = document.querySelector('.fpi-tab[data-tab="new"]');
+    if(!newTab || !newTab.classList.contains('active')) return;
     const id = computeRunId();
     document.getElementById('fpi-runid-display').textContent = 'Run ID: ' + (id || (mixedMode ? '(fill Mould Ref + Machine)' : '(fill Item Code + Machine)'));
   }
@@ -785,7 +873,44 @@
     el.addEventListener('input', refreshRunIdDisplay);
     el.addEventListener('change', refreshRunIdDisplay);
   });
-  refreshRunIdDisplay();
+
+  // The top banner (title, doc-control strip, Run ID) used to be one static FPI-only block
+  // shown above every tab — now that the app also covers In-Process Inspection (its own real
+  // SOP doc, RB-P03-06), it switches per active tab instead of always showing FPI's own info.
+  const TOPBAR_CONFIG = {
+    new:        { h1:'First Piece Inspection Check List', docNo:'RB-P03-04 (Rev00)', effDate:'1 Jul 2023', basis:'5-piece sample from Production', docVisible:true, runId:'new' },
+    records:    { h1:'First Piece Inspection — Records', docNo:'RB-P03-04 (Rev00)', effDate:'1 Jul 2023', basis:'5-piece sample from Production', docVisible:true, runId:false },
+    ipi:        { h1:'In-Process Sample Inspection', docNo:'RB-P03-06 (Rev00)', effDate:'1 Jul 2023', basis:'Periodic in-line sampling — checklist same as FPI', docVisible:true, runId:'ipi' },
+    ipihistory: { h1:'In-Process Sample Inspection — History', docNo:'RB-P03-06 (Rev00)', effDate:'1 Jul 2023', basis:'Periodic in-line sampling — checklist same as FPI', docVisible:true, runId:'ipihistory' },
+    dashboard:  { h1:'Quality Dashboard', docVisible:false, runId:false },
+    lists:      { h1:'Manage Lists & Security', docVisible:false, runId:false },
+    auditlog:   { h1:'Deletion Log', docVisible:false, runId:false }
+  };
+  function updateTopbarForTab(which){
+    const cfg = TOPBAR_CONFIG[which] || TOPBAR_CONFIG.new;
+    document.title = cfg.h1;
+    document.getElementById('fpi-h1').textContent = cfg.h1;
+    document.getElementById('fpi-docstrip').style.display = cfg.docVisible ? '' : 'none';
+    if(cfg.docVisible){
+      document.getElementById('fpi-docno').textContent = cfg.docNo;
+      document.getElementById('fpi-effdate').textContent = cfg.effDate;
+      document.getElementById('fpi-basis').textContent = cfg.basis;
+    }
+    const runIdEl = document.getElementById('fpi-runid-display');
+    if(cfg.runId === 'new'){
+      runIdEl.style.display = '';
+      refreshRunIdDisplay();
+    } else if(cfg.runId === 'ipi'){
+      runIdEl.style.display = '';
+      runIdEl.textContent = 'Run ID: ' + (typeof ipiSelectedRun !== 'undefined' && ipiSelectedRun ? ipiSelectedRun.run_id : '(select a run above)');
+    } else if(cfg.runId === 'ipihistory'){
+      runIdEl.style.display = '';
+      runIdEl.textContent = 'Run ID: ' + (typeof ipihSelectedRun !== 'undefined' && ipihSelectedRun ? ipihSelectedRun.run_id : '(select a run above)');
+    } else {
+      runIdEl.style.display = 'none';
+    }
+  }
+  updateTopbarForTab('new');
   document.getElementById('f_itemcode').addEventListener('change', (e)=>{
     if(!mixedMode && blocks.length && blocks[0].key==='main'){
       blocks[0].wrap.querySelector('.fpi-block-title').textContent = e.target.value.trim() || '(item code)';
@@ -1303,7 +1428,10 @@
       console.error(e); toast('Save error — check connection and try again.'); return;
     }
 
-    await syncToSheets(record);
+    // Don't make the user wait on a third-party Apps Script round trip (often 1-5s, worse on
+    // cold starts) before knowing their save succeeded — the Supabase write above is the
+    // authoritative save; the Sheets mirror runs in the background and reports its own errors.
+    syncToSheets(record);
 
     const wasEditing = !!editingRecordId;
     exitEditMode();
@@ -1440,33 +1568,47 @@
       document.querySelectorAll('.fpi-tab').forEach(t=>t.classList.remove('active'));
       tab.classList.add('active');
       const which = tab.dataset.tab;
+      updateTopbarForTab(which);
       document.getElementById('fpi-panel-new').style.display = which==='new' ? '' : 'none';
       document.getElementById('fpi-panel-records').style.display = which==='records' ? '' : 'none';
+      document.getElementById('fpi-panel-ipi').style.display = which==='ipi' ? '' : 'none';
+      document.getElementById('fpi-panel-ipihistory').style.display = which==='ipihistory' ? '' : 'none';
       document.getElementById('fpi-panel-lists').style.display = which==='lists' ? '' : 'none';
       document.getElementById('fpi-panel-auditlog').style.display = which==='auditlog' ? '' : 'none';
       document.getElementById('fpi-panel-dashboard').style.display = which==='dashboard' ? '' : 'none';
       if(which==='records') loadRecords();
+      if(which==='ipi') ipiLoadRuns();
+      if(which==='ipihistory') ipihLoadRuns();
       if(which==='lists'){ renderAllListManagers(); renderUserPins(); }
       if(which==='auditlog') loadAuditLog();
       if(which==='dashboard') loadDashboard();
     });
   });
 
+  // Lean fetch for the Records table — only the columns the table/row actually render, plus
+  // editHistory (for the EDITED badge) pulled out of the jsonb blob without its much larger
+  // sibling fields (blocks, sharedItems). Full per-record detail is fetched lazily by openDetail
+  // only when a row is actually clicked, instead of every record's full checklist being
+  // downloaded just to show a summary list.
+  async function fetchRecordSummaries_(){
+    const rows = await sbFetch_('fpi_records?select=id,run_id,item_code,mould_ref,mixed_mode,submitted_at,inspected_by,reviewed_by,reviewed_at,overall_result,editHistory:data->editHistory');
+    return (rows||[]).map(r=>({
+      id: r.id, runId: r.run_id, itemCode: r.item_code, mouldRef: r.mould_ref, mixedMode: r.mixed_mode,
+      submittedAt: r.submitted_at, inspectedBy: r.inspected_by, reviewedBy: r.reviewed_by, reviewedAt: r.reviewed_at,
+      overallResult: r.overall_result, editHistory: r.editHistory || []
+    }));
+  }
+
   let cachedRecords = [];
   async function loadRecords(){
     const listEl = document.getElementById('fpi-rec-list');
     listEl.innerHTML = '<div class="fpi-empty">Loading records…</div>';
     try{
-      const items = await backendGetMany('fpi:');
-      const values = Object.values(items).filter(Boolean);
-      if(values.length===0){
+      const records = await fetchRecordSummaries_();
+      if(records.length===0){
         document.getElementById('fpi-rec-count').textContent = '';
         listEl.innerHTML = '<div class="fpi-empty">No inspections saved yet.</div>';
         cachedRecords = []; return;
-      }
-      const records = [];
-      for(const v of values){
-        try{ records.push(JSON.parse(v)); }catch(e){}
       }
       records.sort((a,b)=> new Date(b.submittedAt) - new Date(a.submittedAt));
       cachedRecords = records;
@@ -1682,7 +1824,24 @@
     table.appendChild(tb); listEl.innerHTML=''; listEl.appendChild(table);
   }
 
-  function openDetail(r, readonly, bannerText){
+  // r may be a lean summary row (from the Records table) or already-full (edit-history's
+  // "View old version", the Deletion Log's stored snapshot) — only fetch when it's missing the
+  // full checklist, so a click on a summary row pays for exactly the one record it needs.
+  async function openDetail(r, readonly, bannerText){
+    if(!r.blocks){
+      const loadingBackdrop = document.createElement('div');
+      loadingBackdrop.className = 'fpi-modal-backdrop';
+      loadingBackdrop.innerHTML = `<div class="fpi-modal" style="max-width:280px; text-align:center; padding:36px 20px; color:#7a7d78;">Loading record…</div>`;
+      document.body.appendChild(loadingBackdrop);
+      let full = null;
+      try{
+        const rows = await sbFetch_(`fpi_records?id=eq.${encodeURIComponent(r.id)}&select=data`);
+        full = rows && rows[0] ? rows[0].data : null;
+      }catch(e){ console.error(e); }
+      loadingBackdrop.remove();
+      if(!full){ toast('Could not load record details.'); return; }
+      r = full;
+    }
     const backdrop = document.createElement('div');
     backdrop.className = 'fpi-modal-backdrop';
     const d = new Date(r.submittedAt);
@@ -1877,13 +2036,22 @@
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
   }
 
+  // cachedRecords only holds the lean summary shape now — CSV export genuinely needs every
+  // record's full checklist, so it fetches that itself here rather than the app paying for it
+  // on every Records tab open regardless of whether export is ever used.
+  async function fetchFullRecords_(){
+    const items = await backendGetMany('fpi:');
+    return Object.values(items).filter(Boolean).map(v=>{ try{ return JSON.parse(v); }catch(e){ return null; } }).filter(Boolean);
+  }
   document.getElementById('fpi-export').addEventListener('click', async ()=>{
     if(!cachedRecords.length){ toast('No records to export yet.'); return; }
-    await saveFile('fpi_records.csv', 'text/csv;charset=utf-8;', toCsv(cachedRecords));
+    toast('Preparing export…');
+    await saveFile('fpi_records.csv', 'text/csv;charset=utf-8;', toCsv(await fetchFullRecords_()));
   });
   document.getElementById('fpi-export-partinfo').addEventListener('click', async ()=>{
     if(!cachedRecords.length){ toast('No records to export yet.'); return; }
-    await saveFile('part_information_extract.csv', 'text/csv;charset=utf-8;', toPartInfoCsv(cachedRecords));
+    toast('Preparing export…');
+    await saveFile('part_information_extract.csv', 'text/csv;charset=utf-8;', toPartInfoCsv(await fetchFullRecords_()));
   });
 
   // Master PIN — gates deletion. Verified server-side (see checkMasterPin/hasMasterPin above);
@@ -2119,7 +2287,7 @@
 
   // Gates marking records as reviewed behind the staff member's own personal PIN — verified
   // server-side (see verifyUserPin above), which also identifies who reviewed it.
-  function showNamePrompt(title, message, onConfirm){
+  function showNamePrompt(title, message, onConfirm, loadingLabel){
     const backdrop = document.createElement('div');
     backdrop.className = 'fpi-modal-backdrop';
     backdrop.innerHTML = `<div class="fpi-modal" style="max-width:360px;">
@@ -2141,7 +2309,7 @@
     confirmBtn.addEventListener('click', async ()=>{
       const matchedName = await verifyUserPin(pinInput.value.trim());
       if(!matchedName){ toast('Invalid personal PIN — ask your supervisor to add you under Manage Lists > User PINs.'); pinInput.value=''; pinInput.focus(); return; }
-      confirmBtn.disabled = true; confirmBtn.textContent = 'Reviewing…';
+      confirmBtn.disabled = true; confirmBtn.textContent = loadingLabel || 'Reviewing…';
       try{
         await onConfirm(matchedName);
       } finally {
@@ -2410,15 +2578,18 @@
     else { if(dashChartInstances.weight) dashChartInstances.weight.destroy(); }
   }
 
-  // Storage usage — a Google Sheet holds up to 10,000,000 cells total; our KV sheet uses
-  // 3 columns per row, so that's roughly 3.3M rows (records + audit log + lists combined)
-  // before the spreadsheet itself hits Google's hard limit. Way beyond realistic FPI volume,
-  // so this is a soft heads-up, not a real constraint like the old 20MB artifact cap was.
-  const STORAGE_LIMIT_ROWS = 3000000;
+  // Storage usage — measured against Supabase's Free tier, which caps the whole project's
+  // Postgres database (every table combined, not just ours) at 500 MB. This adds up the raw
+  // JSON size of what we actually write (FPI records, IPI checkpoints, deletion log, dropdown
+  // lists) as an estimate — real on-disk usage will differ a bit (indexes and row overhead push
+  // it up, jsonb TOAST compression pulls it back down), so treat this as a proxy, not the exact
+  // figure Supabase's own dashboard would show. Update this constant if the project ever moves
+  // to the Pro plan (8 GB included).
+  const STORAGE_LIMIT_BYTES = 500 * 1024 * 1024;
   function byteSize(str){ return new Blob([str || '']).size; }
 
   async function computeStorageUsage(){
-    let recordsBytes = 0, auditBytes = 0, listsBytes = 0, rowCount = 0;
+    let recordsBytes = 0, auditBytes = 0, listsBytes = 0, ipiBytes = 0, rowCount = 0;
     try{
       const recItems = await backendGetMany('fpi:');
       const recValues = Object.values(recItems).filter(Boolean);
@@ -2431,6 +2602,11 @@
       rowCount += auditValues.length;
       auditValues.forEach(v=> auditBytes += byteSize(v));
     }catch(e){}
+    try{
+      const ipiRows = await sbFetch_('ipi_records?select=id,data');
+      rowCount += ipiRows.length;
+      ipiRows.forEach(r=> ipiBytes += byteSize(JSON.stringify(r.data)));
+    }catch(e){}
     for(const key of Object.keys(DROPDOWN_LISTS)){
       try{
         const r = await window.storage.get(DROPDOWN_LISTS[key].storeKey, true);
@@ -2438,7 +2614,7 @@
       }catch(e){}
     }
     rowCount += Object.keys(DROPDOWN_LISTS).length;
-    return { recordsBytes, auditBytes, listsBytes, rowCount, totalBytes: recordsBytes + auditBytes + listsBytes };
+    return { recordsBytes, auditBytes, listsBytes, ipiBytes, rowCount, totalBytes: recordsBytes + auditBytes + listsBytes + ipiBytes };
   }
 
   function formatBytes(b){
@@ -2452,17 +2628,19 @@
     const text = document.getElementById('fpi-storage-text');
     text.textContent = 'Calculating…';
     const usage = await computeStorageUsage();
-    const pct = Math.min(100, (usage.rowCount / STORAGE_LIMIT_ROWS) * 100);
-    bar.style.width = Math.max(pct, usage.rowCount>0?0.3:0).toFixed(2) + '%';
+    const pct = Math.min(100, (usage.totalBytes / STORAGE_LIMIT_BYTES) * 100);
+    bar.style.width = Math.max(pct, usage.totalBytes>0?0.3:0).toFixed(2) + '%';
     bar.style.background = pct >= 90 ? 'var(--ng)' : (pct >= 70 ? 'var(--amber)' : 'var(--ok)');
-    text.innerHTML = `<b>${formatBytes(usage.totalBytes)}</b> total, across <b>${usage.rowCount.toLocaleString()}</b> row(s) in the spreadsheet — Records: ${formatBytes(usage.recordsBytes)} · Deletion Log: ${formatBytes(usage.auditBytes)} · Lists: ${formatBytes(usage.listsBytes)}` +
-      (pct >= 90 ? ' — <b style="color:var(--ng);">approaching Google Sheets\' row limit — consider archiving old records.</b>' :
+    text.innerHTML = `<b>${formatBytes(usage.totalBytes)}</b> of ${formatBytes(STORAGE_LIMIT_BYTES)} (Supabase Free tier estimate) — <b>${usage.rowCount.toLocaleString()}</b> row(s): FPI Records ${formatBytes(usage.recordsBytes)} · In-Process ${formatBytes(usage.ipiBytes)} · Deletion Log ${formatBytes(usage.auditBytes)} · Lists ${formatBytes(usage.listsBytes)}` +
+      (pct >= 90 ? ' — <b style="color:var(--ng);">approaching the Supabase Free tier\'s 500 MB limit — consider archiving old records or upgrading to Pro.</b>' :
        pct >= 70 ? ' — worth keeping an eye on as it grows.' : '');
   }
 
+  // Dashboard needs every record's full checklist (defect counts, weight trend) — cachedRecords
+  // is summary-only now, so this fetches its own full copy instead of relying on it.
   async function loadDashboard(){
-    if(!cachedRecords.length) await loadRecords();
-    if(!cachedRecords.length){
+    const records = await fetchFullRecords_();
+    if(!records.length){
       document.getElementById('fpi-dash-cards').innerHTML = '';
       document.getElementById('fpi-dash-empty').style.display = '';
       document.getElementById('fpi-dash-content').style.display = 'none';
@@ -2470,8 +2648,8 @@
     }
     document.getElementById('fpi-dash-empty').style.display = 'none';
     document.getElementById('fpi-dash-content').style.display = '';
-    const data = computeDashboardData(cachedRecords);
-    renderDashCards(cachedRecords, data);
+    const data = computeDashboardData(records);
+    renderDashCards(records, data);
     renderStorageUsage();
     waitForChartLib(()=>{
       renderWeightChart(data);
@@ -2483,6 +2661,861 @@
   setupBlocks([{key:'main', label:'', sub:''}]);
   resetSharedBlock();
   loadRecords();
+
+  // ==========================================================================
+  // In-Process Inspection — reuses ITEMS/SHARED_ITEMS/buildBlockTable from FPI
+  // above so the checklist is guaranteed identical. Own DOM ids (ipi_*) and own
+  // module state (ipiSharedWrap etc.) throughout so nothing here can collide
+  // with the New Inspection tab's own state. Stored in its own `ipi_records`
+  // table, queried directly via sbFetch_ rather than through window.storage.
+  // ==========================================================================
+  let ipiRunsCache = [];
+  let ipiSelectedRun = null;
+  let ipiSelectedRunData = null; // full FPI record's saved `data` json — blocks[], sharedItems, hotRunner, etc.
+  let ipiChecklistBlocks = []; // [{itemCode, wrap, cavInput, originalCavity}] — one per FPI block; >1 only for mixed-mould runs
+  let ipiCavityOverrides = {}; // itemCode -> last-typed "cavities running" value, kept across saves within the same run
+  let ipiSharedWrap = null;
+  let ipiRefRefreshers = {}; // "sharedNo" or "blockIdx" -> refresh() for the live FPI-reference comparison line
+  let ipiEditingId = null; // set while correcting a previously logged checkpoint
+  let ipiEditingOriginal = null; // the full row {id, checked_at, inspector, overall_result, data} being corrected
+  const IPI_TOLERANCE_PCT = 5;
+
+  // Shared by the In-Process tab's active-run picker and the IPI History tab's ended-run
+  // picker — one fetch of recent FPI records plus every recorded ipi_run_status, so each tab
+  // can filter/group the same raw data differently instead of duplicating the round trip.
+  async function ipiFetchRunsAndEndedSet_(){
+    const [runRows, statusRows] = await Promise.all([
+      sbFetch_('fpi_records?select=id,run_id,item_code,mould_ref,machine,mixed_mode,submitted_at&order=submitted_at.desc&limit=300'),
+      sbFetch_('app_settings?select=key,value&key=like.ipi_run_status:*')
+    ]);
+    const endedRunIds = new Set((statusRows||[]).filter(s=>s.value==='ended').map(s=> s.key.slice('ipi_run_status:'.length)));
+    return { runRows: runRows||[], endedRunIds };
+  }
+
+  // A machine can only run one job at a time, so the picker shows at most one run per machine —
+  // the most recent FPI record for it, unless marked "ended" via End Run, in which case that
+  // machine has no active run until a fresh FPI is filed.
+  async function ipiLoadRuns(){
+    const sel = document.getElementById('ipi_run_select');
+    const prevValue = sel.value;
+    try{
+      const { runRows, endedRunIds } = await ipiFetchRunsAndEndedSet_();
+      const latestByMachine = {};
+      runRows.forEach(r=>{
+        if(!(r.machine in latestByMachine)) latestByMachine[r.machine] = r; // rows already sorted newest-first
+      });
+      ipiRunsCache = Object.values(latestByMachine)
+        .filter(r=> !endedRunIds.has(r.run_id))
+        .sort((a,b)=> (parseFloat(a.machine)||0) - (parseFloat(b.machine)||0));
+      sel.innerHTML = '<option value="">Select the active run this belongs to…</option>' + ipiRunsCache.map(r=>{
+        const label = 'M' + r.machine + ' — ' + (r.mixed_mode ? r.mould_ref : r.item_code);
+        return `<option value="${escapeHtml(r.id)}">${escapeHtml(label)}</option>`;
+      }).join('');
+      if(!ipiRunsCache.length) sel.innerHTML = '<option value="">No active runs — every machine is idle or ended</option>';
+      if(prevValue && ipiRunsCache.some(r=>r.id===prevValue)) sel.value = prevValue;
+    }catch(e){ console.error(e); toast('Could not load active runs.'); }
+  }
+
+  // Mean of the 5 sample values from an FPI shared-item or checklist-row `samples` object —
+  // used to build the "FPI reference" line staff compare their in-process readings against.
+  function ipiMeanOfSamples(samples){
+    if(!samples) return null;
+    const vals = SAMPLES.map(s=> parseFloat((samples[s]||{}).value)).filter(v=>!isNaN(v));
+    if(!vals.length) return null;
+    return vals.reduce((a,b)=>a+b,0)/vals.length;
+  }
+  function ipiComputeReferencesForBlock(block){
+    const partWeightRow = block ? block.results.find(r=>r.no===3) : null;
+    const shared = (ipiSelectedRunData && ipiSelectedRunData.sharedItems) || {};
+    return {
+      partWeight: partWeightRow ? ipiMeanOfSamples(partWeightRow.samples) : null,
+      runnerWeight: ipiSelectedRunData && ipiSelectedRunData.hotRunner ? null : ipiMeanOfSamples(shared['1'] && shared['1'].samples),
+      cycleTime: ipiMeanOfSamples(shared['2'] && shared['2'].samples),
+      hotRunner: !!(ipiSelectedRunData && ipiSelectedRunData.hotRunner)
+    };
+  }
+  // Appends a small live-updating line under an item's name showing the FPI reference mean and
+  // how this checkpoint's own readings compare — turns red once the drift passes tolerance.
+  function ipiWireReference(wrap, itemNo, refValue, isHotRunnerItem){
+    const anyInput = wrap.querySelector(`.fpi-measure-input[data-item="${itemNo}"]`);
+    if(!anyInput) return;
+    const nameCell = anyInput.closest('tr').querySelector('.fpi-namecell');
+    const refLine = document.createElement('div');
+    refLine.style.cssText = 'font-size:10.5px; margin-top:3px; color:#7a7d78;';
+    nameCell.appendChild(refLine);
+    function refresh(){
+      if(isHotRunnerItem && document.getElementById('ipi_hotrunner') && document.getElementById('ipi_hotrunner').checked){
+        refLine.textContent = 'FPI ref: n/a (hot runner)'; refLine.style.color = '#9a9d96'; refLine.style.fontWeight = '400'; return;
+      }
+      if(refValue===null || refValue===undefined || isNaN(refValue)){
+        refLine.textContent = 'No FPI reference available'; refLine.style.color = '#9a9d96'; refLine.style.fontWeight = '400'; return;
+      }
+      const inputs = wrap.querySelectorAll(`.fpi-measure-input[data-item="${itemNo}"]`);
+      const vals = Array.from(inputs).map(i=>parseFloat(i.value)).filter(v=>!isNaN(v));
+      if(!vals.length){
+        refLine.textContent = `FPI ref: ${refValue.toFixed(3)}`; refLine.style.color = '#7a7d78'; refLine.style.fontWeight = '400'; return;
+      }
+      const mean = vals.reduce((a,b)=>a+b,0)/vals.length;
+      const diffPct = refValue !== 0 ? ((mean-refValue)/refValue)*100 : 0;
+      const flagged = Math.abs(diffPct) > IPI_TOLERANCE_PCT;
+      refLine.innerHTML = `FPI ref: ${refValue.toFixed(3)} · now: ${mean.toFixed(3)} (${diffPct>=0?'+':''}${diffPct.toFixed(1)}%)` + (flagged ? ' ⚠' : '');
+      refLine.style.color = flagged ? 'var(--ng)' : 'var(--ok)';
+      refLine.style.fontWeight = flagged ? '700' : '400';
+    }
+    wrap.querySelectorAll(`.fpi-measure-input[data-item="${itemNo}"]`).forEach(inp=> inp.addEventListener('input', refresh));
+    ipiRefRefreshers[itemNo] = refresh;
+    refresh();
+  }
+
+  function ipiRenderHeader(){
+    const d = ipiSelectedRunData;
+    document.getElementById('ipi_h_item_label').textContent = d.mixedMode ? 'Mould / Job Reference' : 'Item Code';
+    document.getElementById('ipi_h_item').value = (d.mixedMode ? d.mouldRef : d.itemCode) || '';
+    document.getElementById('ipi_h_material').value = d.material || '';
+    document.getElementById('ipi_h_colour').value = d.colour || '';
+    document.getElementById('ipi_h_customer').value = d.customer || '';
+    document.getElementById('ipi_h_machine').value = d.machine || '';
+    document.getElementById('ipi_h_cavity').value = d.nosCavity || '';
+    document.getElementById('ipi_run_header').style.display = '';
+  }
+
+  function buildIpiSharedBlock(){
+    const wrap = document.createElement('div');
+    wrap.className = 'fpi-block';
+    wrap.innerHTML = `
+      <div class="fpi-tablewrap">
+        <table class="fpi-grid">
+          <thead><tr>
+            <th class="fpi-sticky-h">Item / Instrument</th>
+            <th>Sample 1</th><th>Sample 2</th><th>Sample 3</th><th>Sample 4</th><th>Sample 5</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>`;
+    const tbody = wrap.querySelector('tbody');
+    SHARED_ITEMS.forEach(item=>{
+      const tr = document.createElement('tr');
+      const nameCell = document.createElement('td');
+      nameCell.className = 'fpi-namecell';
+      nameCell.innerHTML = `<span class="fpi-no">${item.no}</span><span class="fpi-itemname">${item.name}${item.unit?' ('+item.unit+')':''}</span><div class="fpi-iteminstr">${item.instrument}</div>`;
+      if(item.no === 1){
+        const hrLabel = document.createElement('label');
+        hrLabel.style.cssText = 'display:flex; align-items:center; gap:5px; font-size:11px; font-weight:600; color:var(--navy); margin-top:5px; cursor:pointer;';
+        hrLabel.innerHTML = `<input type="checkbox" id="ipi_hotrunner"/> Hot Runner (= 0)`;
+        hrLabel.querySelector('#ipi_hotrunner').addEventListener('change', applyIpiHotRunnerState);
+        nameCell.appendChild(hrLabel);
+      }
+      tr.appendChild(nameCell);
+      SAMPLES.forEach(s=>{
+        const td = document.createElement('td');
+        td.className = 'fpi-samplecell';
+        td.innerHTML = `<input class="fpi-measure-input" type="number" step="0.001" data-item="${item.no}" data-sample="${s}" data-role="value" placeholder="value"/>`;
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    wrap.querySelectorAll('.fpi-measure-input').forEach(inp=> enforceMaxDecimals_(inp, 3));
+    return wrap;
+  }
+  function applyIpiHotRunnerState(){
+    const cb = document.getElementById('ipi_hotrunner');
+    const on = cb && cb.checked;
+    SAMPLES.forEach(s=>{
+      const inp = ipiSharedWrap.querySelector(`.fpi-measure-input[data-item="1"][data-sample="${s}"]`);
+      if(!inp) return;
+      inp.disabled = on;
+      if(on) inp.value = '0';
+    });
+    if(ipiRefRefreshers[1]) ipiRefRefreshers[1]();
+  }
+  function ipiResetSharedBlock(){
+    const container = document.getElementById('ipi_shared_block');
+    container.innerHTML = '';
+    ipiSharedWrap = buildIpiSharedBlock();
+    container.appendChild(ipiSharedWrap);
+    applyIpiHotRunnerState();
+    // Runner Weight / Cycle Time are shared across the whole shot, so any block's reference works.
+    const refs = ipiComputeReferencesForBlock((ipiSelectedRunData && ipiSelectedRunData.blocks && ipiSelectedRunData.blocks[0]) || null);
+    ipiWireReference(ipiSharedWrap, 1, refs.runnerWeight, true);
+    ipiWireReference(ipiSharedWrap, 2, refs.cycleTime, false);
+  }
+  function getIpiSharedResults(){
+    const out = {};
+    SHARED_ITEMS.forEach(item=>{
+      const samples = {};
+      SAMPLES.forEach(s=>{
+        const v = ipiSharedWrap.querySelector(`.fpi-measure-input[data-item="${item.no}"][data-sample="${s}"]`).value;
+        samples[s] = {value:v};
+      });
+      out[item.no] = {name:item.name, samples};
+    });
+    return out;
+  }
+
+  // One checklist block per FPI block — always. A non-mixed run's FPI record has exactly one
+  // block already, so this naturally renders a single checklist there; a mixed-mould run's
+  // record has one block per product/cavity, so all of them render at once here too, matching
+  // how FPI itself shows every cavity's checklist together rather than picking one at a time.
+  function ipiResetChecklist(){
+    const container = document.getElementById('ipi_checklist_container');
+    container.innerHTML = '';
+    ipiChecklistBlocks = [];
+    const blocksSource = (ipiSelectedRunData && ipiSelectedRunData.blocks) || [];
+    blocksSource.forEach((b, idx)=>{
+      const sub = b.cavityQty ? `${b.cavityQty} cavit${b.cavityQty>1?'ies':'y'} — checkpoint` : 'Checkpoint';
+      const wrap = buildBlockTable('ipi-checkpoint-'+idx, b.itemCode, sub);
+      container.appendChild(wrap);
+      const refs = ipiComputeReferencesForBlock(b);
+      ipiWireReference(wrap, 3, refs.partWeight, false);
+
+      // Cavity count is per product/cavity in mixed mode (each block has its own cavityQty from
+      // the FPI record); in simple mode there's one block, so this falls back to the run's total.
+      const originalCavity = ipiSelectedRunData.mixedMode ? b.cavityQty : ipiSelectedRunData.nosCavity;
+      const initial = ipiCavityOverrides.hasOwnProperty(b.itemCode) ? ipiCavityOverrides[b.itemCode] : (originalCavity || '');
+      const cavRow = document.createElement('div');
+      cavRow.style.cssText = 'display:flex; align-items:center; gap:8px; padding:8px 14px; background:#fbfaf7; border:1px solid var(--line); border-top:none; font-size:12px;';
+      cavRow.innerHTML = `<label style="color:#6b6f6a;">Cavities running now:</label><input type="number" step="1" class="ipi-cav-input" style="width:70px; padding:5px 7px; border:1px solid var(--line-strong); border-radius:5px; font-size:13px;" value="${escapeHtml(initial)}"/><span style="color:#9a9d96;">(FPI: ${escapeHtml(originalCavity||'—')})</span>`;
+      wrap.insertBefore(cavRow, wrap.querySelector('.fpi-tablewrap'));
+      const cavInput = cavRow.querySelector('.ipi-cav-input');
+      enforceIntegerOnly_(cavInput);
+      cavInput.addEventListener('input', ()=>{ ipiCavityOverrides[b.itemCode] = cavInput.value; });
+
+      ipiChecklistBlocks.push({itemCode:b.itemCode, wrap, cavInput, originalCavity});
+    });
+  }
+
+  // A run in the picker is always active by construction (ipiLoadRuns already filters ended
+  // ones out), so there's nothing to check server-side here — just show the badge.
+  function ipiShowRunActive(){
+    const statusBadge = document.getElementById('ipi_run_status_badge');
+    statusBadge.style.display = '';
+    statusBadge.className = 'fpi-badge ok';
+    statusBadge.textContent = 'Active';
+  }
+  let ipiEndRunArmed = false;
+  document.getElementById('ipi_end_run_btn').addEventListener('click', async ()=>{
+    if(!ipiSelectedRun) return;
+    const btn = document.getElementById('ipi_end_run_btn');
+    if(!ipiEndRunArmed){
+      ipiEndRunArmed = true;
+      btn.textContent = 'Tap again to confirm';
+      toast('Tap "End run" once more to confirm — this marks production concluded and frees up the machine.');
+      setTimeout(()=>{ ipiEndRunArmed = false; btn.textContent = 'End run'; }, 4000);
+      return;
+    }
+    ipiEndRunArmed = false;
+    btn.textContent = 'End run';
+    await window.storage.set('ipi_run_status:'+ipiSelectedRun.run_id, 'ended', true);
+    toast('Run marked as concluded — Machine ' + ipiSelectedRun.machine + ' is now free for a new run.');
+    const sel = document.getElementById('ipi_run_select');
+    sel.value = '';
+    sel.dispatchEvent(new Event('change', {bubbles:true}));
+    await ipiLoadRuns();
+  });
+
+  let ipiLogRowsCache = [];
+  async function ipiLoadLog(){
+    const logEl = document.getElementById('ipi_log');
+    logEl.innerHTML = '<div class="fpi-empty">Loading…</div>';
+    try{
+      const rows = await sbFetch_(`ipi_records?run_id=eq.${encodeURIComponent(ipiSelectedRun.run_id)}&select=id,checked_at,inspector,overall_result,data&order=checked_at.desc`);
+      ipiLogRowsCache = rows;
+      if(!rows.length){
+        logEl.innerHTML = '<div class="fpi-empty">No checkpoints logged for this run yet.</div>';
+        return;
+      }
+      const groups = {}; const order = [];
+      rows.forEach(r=>{
+        const day = formatLocalDate_(r.checked_at);
+        if(!groups[day]){ groups[day]=[]; order.push(day); }
+        groups[day].push(r);
+      });
+      const todayStr = formatLocalDate_(new Date().toISOString());
+      logEl.innerHTML = order.map(day=>{
+        const items = groups[day].map(r=>{
+          const isNg = r.overall_result && r.overall_result.indexOf('NG')>=0;
+          const bg = isNg ? 'var(--ng-bg)' : 'var(--ok-bg)';
+          const col = isNg ? 'var(--ng)' : 'var(--ok)';
+          const time = new Date(r.checked_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+          const product = r.data && r.data.blocks && r.data.blocks.length>1 ? ' · ' + r.data.blocks.map(b=>escapeHtml(b.itemCode)).join(', ') : '';
+          const cavFlags = (r.data && r.data.blocks || []).filter(b=> b.originalCavity && String(b.cavitiesRunning)!==String(b.originalCavity))
+            .map(b=> `${escapeHtml(b.itemCode)} ${escapeHtml(b.cavitiesRunning)}/${escapeHtml(b.originalCavity)}`);
+          const cavityFlag = cavFlags.length ? ` <span style="color:var(--amber); font-weight:700;">⚠ ${cavFlags.join(', ')} cav</span>` : '';
+          const editedTag = r.data && r.data.editHistory && r.data.editHistory.length ? ' <span style="font-size:9.5px;color:var(--amber);font-weight:700;">EDITED</span>' : '';
+          return `<div data-rowid="${escapeHtml(r.id)}" style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font-size:12.5px; margin-bottom:6px; cursor:pointer;">
+            <span>${escapeHtml(time)} · ${escapeHtml(r.inspector||'—')}${product}${cavityFlag}${editedTag}</span>
+            <span style="font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px; background:${bg}; color:${col};">${escapeHtml(r.overall_result||'—')}</span>
+          </div>`;
+        }).join('');
+        return `<div style="font-size:11.5px; color:#7a7d78; margin:10px 0 4px;">${escapeHtml(day)}${day===todayStr?' (today)':''}</div>${items}`;
+      }).join('');
+      logEl.querySelectorAll('[data-rowid]').forEach(el=>{
+        el.addEventListener('mouseenter', ()=> el.style.background='#fbfaf7');
+        el.addEventListener('mouseleave', ()=> el.style.background='');
+        el.addEventListener('click', ()=>{
+          const row = ipiLogRowsCache.find(x=>x.id===el.dataset.rowid);
+          if(row) ipiOpenDetail(row, ipiSelectedRunData);
+        });
+      });
+    }catch(e){
+      console.error(e);
+      logEl.innerHTML = '<div class="fpi-empty">Could not load the run log.</div>';
+    }
+  }
+
+  // Full detail view for one logged checkpoint — same modal shape as FPI's own openDetail, so a
+  // checkpoint reads the same way a saved FPI record does: header info, shared measurements,
+  // then a full item-by-item checklist per product with all 5 sample readings. runHeaderData is
+  // passed in explicitly (not read from a module var) so this can be reused from any tab that
+  // has its own separately-loaded run — the In-Process tab and the IPI History tab both call it.
+  function ipiOpenDetail(row, runHeaderData, opts){
+    opts = opts || {};
+    const allowEdit = opts.allowEdit !== false && !opts.archived;
+    const d = row.data || {};
+    const runHeader = runHeaderData || {};
+    const backdrop = document.createElement('div');
+    backdrop.className = 'fpi-modal-backdrop';
+    const archivedBanner = opts.archived ? `<div style="background:#f3f1fa; border:1px solid #8b7fc9; color:#6b5fa8; border-radius:6px; padding:8px 12px; font-size:11.5px; margin-bottom:10px;">${escapeHtml(opts.bannerText || 'Showing this checkpoint as it was before a later correction.')}</div>` : '';
+    const headerGrid = `
+      <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:8px 16px; background:#fbfaf7; border:1px solid var(--line); border-radius:8px; padding:12px 14px; margin-bottom:14px; font-size:12.5px;">
+        <div><b style="display:block;font-size:10px;text-transform:uppercase;color:#8a8d87;letter-spacing:.05em;">Material</b>${escapeHtml(runHeader.material)||'—'}</div>
+        <div><b style="display:block;font-size:10px;text-transform:uppercase;color:#8a8d87;letter-spacing:.05em;">Colour</b>${escapeHtml(runHeader.colour)||'—'}</div>
+        <div><b style="display:block;font-size:10px;text-transform:uppercase;color:#8a8d87;letter-spacing:.05em;">Customer</b>${escapeHtml(runHeader.customer)||'—'}</div>
+        <div><b style="display:block;font-size:10px;text-transform:uppercase;color:#8a8d87;letter-spacing:.05em;">Machine</b>${escapeHtml(runHeader.machine)||'—'}</div>
+        <div><b style="display:block;font-size:10px;text-transform:uppercase;color:#8a8d87;letter-spacing:.05em;">Inspector</b>${escapeHtml(row.inspector)||'—'}</div>
+        <div><b style="display:block;font-size:10px;text-transform:uppercase;color:#8a8d87;letter-spacing:.05em;">Overall Result</b>${escapeHtml(row.overall_result)||'—'}</div>
+      </div>
+      ${d.remarks ? `<div style="font-size:12.5px; margin-bottom:14px;"><b style="display:block;font-size:10px;text-transform:uppercase;color:#8a8d87;letter-spacing:.05em;">Remarks</b>${escapeHtml(d.remarks)}</div>` : ''}
+    `;
+    const sharedSection = d.sharedItems ? SHARED_ITEMS.map(item=>{
+      const entry = d.sharedItems[item.no];
+      if(!entry) return '';
+      const isRunner = item.no === 1;
+      const cells = (isRunner && d.hotRunner) ? 'Hot runner (0)' : SAMPLES.map(s=>{
+        const cell = entry.samples[s] || {};
+        return escapeHtml(cell.value || '–');
+      }).join(' &nbsp;|&nbsp; ');
+      return `<div style="margin-bottom:10px;">
+        <div style="font-weight:700;font-size:13px;margin-bottom:4px;">${escapeHtml(item.name)} (shared)</div>
+        <div style="padding:8px;border:1px solid var(--line);border-radius:6px;font-size:12.5px;" class="stamp">${cells}</div>
+      </div>`;
+    }).join('') : '';
+    const blockSections = (d.blocks||[]).map(blk=>{
+      const rows = blk.results.map(row2=>{
+        const cells = SAMPLES.map(s=>{
+          const cell = row2.samples[s];
+          if(row2.type==='measure') return escapeHtml(cell.value || '–');
+          return escapeHtml(cell.result || '–');
+        }).join(' &nbsp;|&nbsp; ');
+        return `<div style="display:flex;justify-content:space-between;padding:5px 8px;border-bottom:1px solid #f0efe9;font-size:12.5px;">
+          <span>${row2.no}. ${escapeHtml(row2.name)}</span><span class="stamp">${cells}</span></div>`;
+      }).join('');
+      const cavNote = blk.originalCavity && String(blk.cavitiesRunning)!==String(blk.originalCavity)
+        ? ` <span style="color:var(--amber);">⚠ running ${escapeHtml(blk.cavitiesRunning)} of ${escapeHtml(blk.originalCavity)} cavities</span>` : ` <span class="stamp" style="color:#8a8d87;">(${escapeHtml(blk.cavitiesRunning||'—')} cavities)</span>`;
+      return `<div style="margin-bottom:14px;">
+        <div style="font-weight:700;font-size:13px;margin-bottom:4px;">${escapeHtml(blk.itemCode)} — ${escapeHtml(blk.overallResult)}${cavNote}</div>
+        <div style="max-height:220px;overflow-y:auto;border:1px solid var(--line);border-radius:6px;">${rows}</div>
+      </div>`;
+    }).join('');
+    const editHistorySection = (d.editHistory && d.editHistory.length) ? `
+      <div style="margin-top:14px; padding-top:10px; border-top:1px dashed var(--line-strong);">
+        <div style="font-weight:700; font-size:12px; color:var(--amber); margin-bottom:6px;">Edit history (${d.editHistory.length})</div>
+        ${d.editHistory.map((h,i)=>`<div style="font-size:11.5px; color:#7a7d78; margin-bottom:8px;">
+          ${new Date(h.editedAt).toLocaleString()} — ${escapeHtml(h.editedBy||'')}: ${escapeHtml(h.reason||'(no reason given)')}
+          <button type="button" class="ipi-history-view-btn" data-history-index="${i}" style="margin-left:6px; font-size:10.5px; padding:2px 8px; border-radius:10px; border:1px solid var(--line-strong); background:#fff; color:#5b5e58; cursor:pointer; vertical-align:middle;">View old version</button>
+        </div>`).join('')}
+      </div>` : '';
+    backdrop.innerHTML = `<div class="fpi-modal">
+      <button class="fpi-btn ghost fpi-modal-close" id="ipi-modal-close">Close</button>
+      ${allowEdit ? `<button class="fpi-btn ghost" id="ipi-modal-edit" style="float:right; margin-right:8px;">Edit / Correct</button>` : ''}
+      <h3>${escapeHtml(runHeader.mixedMode ? runHeader.mouldRef : runHeader.itemCode)} ${d.editHistory && d.editHistory.length ? '<span style="font-size:10.5px; color:var(--amber); font-weight:700; vertical-align:middle;">EDITED</span>' : ''}</h3>
+      <div style="font-size:12px;color:#7a7d78;margin-bottom:10px;">Run ID ${escapeHtml(d.runId)} · Checked ${new Date(row.checked_at).toLocaleString()}</div>
+      ${archivedBanner}
+      ${headerGrid}
+      ${sharedSection}
+      ${blockSections}
+      ${editHistorySection}
+      </div>`;
+    document.body.appendChild(backdrop);
+    backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) backdrop.remove(); });
+    backdrop.querySelector('#ipi-modal-close').addEventListener('click', ()=>backdrop.remove());
+    backdrop.querySelectorAll('.ipi-history-view-btn').forEach(btn=>{
+      btn.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        const h = d.editHistory[parseInt(btn.dataset.historyIndex)];
+        if(h && h.previousSnapshot){
+          const oldRow = Object.assign({}, row, { data: h.previousSnapshot, overall_result: h.previousSnapshot.overallResult, inspector: h.previousSnapshot.inspector, checked_at: h.previousSnapshot.checkedAt });
+          ipiOpenDetail(oldRow, runHeaderData, { archived:true, bannerText: 'Showing this checkpoint as it was before this correction was made — not the current version.' });
+        }
+      });
+    });
+    if(allowEdit){
+      backdrop.querySelector('#ipi-modal-edit').addEventListener('click', ()=>{
+        backdrop.remove();
+        ipiStartEdit(row);
+      });
+    }
+  }
+
+  document.getElementById('ipi_run_select').addEventListener('change', async (e)=>{
+    const id = e.target.value;
+    ipiSelectedRun = ipiRunsCache.find(r=>r.id===id) || null;
+    updateTopbarForTab('ipi');
+    const headerEl = document.getElementById('ipi_run_header');
+    const formWrap = document.getElementById('ipi_form_wrap');
+    const endBtn = document.getElementById('ipi_end_run_btn');
+    const statusBadge = document.getElementById('ipi_run_status_badge');
+    if(!ipiSelectedRun){
+      ipiSelectedRunData = null;
+      headerEl.style.display = 'none'; formWrap.style.display = 'none';
+      endBtn.style.display = 'none'; statusBadge.style.display = 'none';
+      document.getElementById('ipi_log').innerHTML = '';
+      return;
+    }
+    try{
+      const rows = await sbFetch_(`fpi_records?id=eq.${encodeURIComponent(ipiSelectedRun.id)}&select=data`);
+      ipiSelectedRunData = rows && rows[0] ? rows[0].data : null;
+    }catch(err){ console.error(err); toast('Could not load the FPI record for this run.'); ipiSelectedRunData = null; }
+    if(!ipiSelectedRunData){ formWrap.style.display = 'none'; return; }
+
+    ipiRenderHeader();
+    ipiCavityOverrides = {};
+    formWrap.style.display = '';
+    endBtn.style.display = '';
+    ipiResetChecklist();
+    ipiResetSharedBlock();
+    document.getElementById('ipi_remarks').value = '';
+    ipiShowRunActive();
+    await ipiLoadLog();
+  });
+
+  document.getElementById('ipi_save_btn').addEventListener('click', async ()=>{
+    if(!ipiSelectedRun || !ipiSelectedRunData){ toast('Select a run first.'); return; }
+    if(!ipiChecklistBlocks.length){ toast('No checklist to log.'); return; }
+    const anyStarted = ipiChecklistBlocks.some(b=> b.wrap.querySelector('.fpi-block-badge').textContent !== 'NOT STARTED');
+    if(!anyStarted){ toast('Record at least one check result before saving.'); return; }
+    if(ipiEditingId){
+      const reason = document.getElementById('ipi-edit-reason').value.trim();
+      if(!reason){ toast('Enter a reason for this correction.'); return; }
+      const enteredPin = document.getElementById('ipi-edit-pin').value.trim();
+      const matchedName = await verifyUserPin(enteredPin);
+      if(!matchedName){ toast('Invalid PIN — ask your supervisor to add you under Manage Lists > User PINs.'); return; }
+      ipiShowSubmitReview(ipiCollectCheckpoint(), matchedName);
+      return;
+    }
+    ipiShowSubmitReview(ipiCollectCheckpoint());
+  });
+
+  function ipiExitEdit(){
+    ipiEditingId = null;
+    ipiEditingOriginal = null;
+    document.getElementById('ipi-edit-banner').style.display = 'none';
+    document.getElementById('ipi-edit-pin').value = '';
+    document.getElementById('ipi-edit-reason').value = '';
+    document.getElementById('ipi_save_btn').textContent = 'Log checkpoint';
+  }
+  document.getElementById('ipi-edit-cancel').addEventListener('click', ()=>{
+    ipiExitEdit();
+    ipiResetChecklist();
+    ipiResetSharedBlock();
+    document.getElementById('ipi_remarks').value = '';
+    toast('Correction cancelled.');
+  });
+
+  // Loads a previously logged checkpoint's saved values back into the (already-open) form —
+  // same idea as FPI's startEditRecord — so a correction is made against the exact same
+  // checklist/shared-block/cavity UI a fresh checkpoint uses, not a separate edit view.
+  function ipiStartEdit(row){
+    ipiEditingId = row.id;
+    ipiEditingOriginal = row;
+    const d = row.data || {};
+
+    ipiCavityOverrides = {};
+    (d.blocks||[]).forEach(b=>{ ipiCavityOverrides[b.itemCode] = b.cavitiesRunning; });
+    ipiResetChecklist();
+    (d.blocks||[]).forEach(savedBlock=>{
+      const liveBlock = ipiChecklistBlocks.find(b=>b.itemCode===savedBlock.itemCode);
+      if(!liveBlock) return;
+      savedBlock.results.forEach(row2=>{
+        SAMPLES.forEach(s=>{
+          const cell = row2.samples[s];
+          if(row2.type==='measure'){
+            const inp = liveBlock.wrap.querySelector(`.fpi-measure-input[data-item="${row2.no}"][data-sample="${s}"]`);
+            if(inp) inp.value = cell.value || '';
+          } else {
+            const btn = liveBlock.wrap.querySelector(`.fpi-toggle[data-item="${row2.no}"][data-sample="${s}"]`);
+            if(btn && cell.result){ btn.dataset.state = cell.result; btn.textContent = cell.result; }
+          }
+        });
+      });
+      updateBlockOverall(liveBlock.wrap);
+    });
+
+    ipiResetSharedBlock();
+    document.getElementById('ipi_hotrunner').checked = !!d.hotRunner;
+    if(d.sharedItems){
+      Object.keys(d.sharedItems).forEach(no=>{
+        const samples = d.sharedItems[no].samples;
+        SAMPLES.forEach(s=>{
+          const inp = ipiSharedWrap.querySelector(`.fpi-measure-input[data-item="${no}"][data-sample="${s}"]`);
+          if(inp) inp.value = (samples[s]||{}).value || '';
+        });
+      });
+    }
+    applyIpiHotRunnerState();
+
+    document.getElementById('ipi_remarks').value = d.remarks || '';
+    document.getElementById('ipi-edit-banner').style.display = '';
+    document.getElementById('ipi_save_btn').textContent = 'Save correction';
+    document.getElementById('fpi-panel-ipi').scrollIntoView({behavior:'smooth'});
+  }
+
+  // Reads the current DOM state of every checklist block + the shared measurements into the
+  // shape that both the review modal and the actual save use — computed once so what the
+  // inspector reviews is exactly what gets saved, not a second independent read of the form.
+  function ipiCollectCheckpoint(){
+    const blocksData = ipiChecklistBlocks.map(b=>{
+      const results = ITEMS.map(item=>{
+        const row = {no:item.no, name:item.name, instrument:item.instrument, type:item.type, samples:{}};
+        SAMPLES.forEach(s=>{
+          if(item.type==='measure'){
+            const v = b.wrap.querySelector(`.fpi-measure-input[data-item="${item.no}"][data-sample="${s}"]`).value;
+            row.samples[s] = {value:v};
+          } else {
+            const btn = b.wrap.querySelector(`.fpi-toggle[data-item="${item.no}"][data-sample="${s}"]`);
+            row.samples[s] = {result:btn.dataset.state};
+          }
+        });
+        return row;
+      });
+      return {
+        itemCode: b.itemCode, overallResult: b.wrap.querySelector('.fpi-block-badge').textContent, results,
+        cavitiesRunning: b.cavInput.value.trim(), originalCavity: b.originalCavity
+      };
+    });
+    const badgeTexts = blocksData.map(b=>b.overallResult);
+    let overallResult;
+    if(badgeTexts.some(t=>t.indexOf('NG')>=0)) overallResult = 'NG — DEFECT FOUND';
+    else if(badgeTexts.every(t=>t.indexOf('OK')>=0)) overallResult = 'OK — PASS';
+    else overallResult = 'INCOMPLETE';
+    return {
+      blocksData, overallResult, sharedItems: getIpiSharedResults(), hotRunner: document.getElementById('ipi_hotrunner').checked,
+      remarks: document.getElementById('ipi_remarks').value.trim()
+    };
+  }
+
+  function ipiShowSubmitReview(checkpoint, editorName){
+    const d = ipiSelectedRunData;
+    const fld = (label, val) => `<div><b style="display:block;font-size:10px;text-transform:uppercase;color:#8a8d87;letter-spacing:.05em;">${label}</b>${escapeHtml(val)||'—'}</div>`;
+    const headerReview = `<div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px 16px; background:#fbfaf7; border:1px solid var(--line); border-radius:8px; padding:12px 14px; margin-bottom:14px; font-size:12.5px;">
+      ${d.mixedMode ? fld('Mould / Job Ref', d.mouldRef) : fld('Item Code', d.itemCode)}
+      ${fld('Material', d.material)}
+      ${fld('Colour', d.colour)}
+      ${fld('Customer', d.customer)}
+      ${fld('Machine', d.machine)}
+    </div>`;
+    const sharedReview = SHARED_ITEMS.map(item=>{
+      const vals = SAMPLES.map(s=> (checkpoint.sharedItems[item.no].samples[s]||{}).value || '–').join(' | ');
+      return `<div style="font-size:12px; margin-bottom:6px;"><b>${escapeHtml(item.name)}:</b> ${escapeHtml(vals)}</div>`;
+    }).join('');
+    const blocksReview = checkpoint.blocksData.map(blk=>{
+      const weightRow = blk.results.find(r=>r.no===3);
+      const weights = weightRow ? SAMPLES.map(s=>(weightRow.samples[s]||{}).value || '–').join(' | ') : '';
+      const resColor = blk.overallResult.indexOf('NG')>=0 ? 'var(--ng)' : (blk.overallResult.indexOf('OK')>=0 ? 'var(--ok)' : 'var(--amber)');
+      const cavChanged = blk.originalCavity && String(blk.cavitiesRunning) !== String(blk.originalCavity);
+      const cavNote = cavChanged ? `<div style="color:var(--amber); font-size:11px; margin-top:2px;">⚠ Running ${escapeHtml(blk.cavitiesRunning)} of ${escapeHtml(blk.originalCavity)} cavities — differs from the FPI record</div>` : '';
+      return `<div style="padding:6px 10px; border-bottom:1px solid #f0efe9; font-size:12.5px;">
+        <div style="display:flex; justify-content:space-between;">
+          <span><b>${escapeHtml(blk.itemCode)}</b> — Part Weight: ${escapeHtml(weights)}</span>
+          <span style="color:${resColor}; font-weight:700;">${escapeHtml(blk.overallResult)}</span>
+        </div>
+        ${cavNote}
+      </div>`;
+    }).join('');
+    const backdrop = document.createElement('div');
+    backdrop.className = 'fpi-modal-backdrop';
+    backdrop.innerHTML = `<div class="fpi-modal" style="max-width:640px;">
+      <h3>${editorName ? 'Review correction' : 'Review before logging'}</h3>
+      <div style="font-size:12px; color:#7a7d78; margin-bottom:14px;">Check every reading below — especially anything flagged against the FPI reference — before confirming.</div>
+      ${headerReview}
+      <div style="margin-bottom:14px;"><b style="display:block;font-size:10px;text-transform:uppercase;color:#8a8d87;letter-spacing:.05em;margin-bottom:6px;">Shared measurements</b>${sharedReview}</div>
+      <div style="margin-bottom:14px;">
+        <b style="display:block;font-size:10px;text-transform:uppercase;color:#8a8d87;letter-spacing:.05em;margin-bottom:6px;">Products checked</b>
+        <div style="border:1px solid var(--line); border-radius:6px;">${blocksReview}</div>
+      </div>
+      ${checkpoint.remarks ? `<div style="font-size:12.5px; margin-bottom:14px;"><b style="display:block;font-size:10px;text-transform:uppercase;color:#8a8d87;letter-spacing:.05em;">Remarks</b>${escapeHtml(checkpoint.remarks)}</div>` : ''}
+      <div style="display:flex; gap:10px; justify-content:flex-end;">
+        <button type="button" class="fpi-btn ghost" id="ipi-review-back">Go back and edit</button>
+        <button type="button" class="fpi-btn primary" id="ipi-review-confirm">${editorName ? 'Confirm & Save Correction' : 'Confirm & Log'}</button>
+      </div>
+    </div>`;
+    document.body.appendChild(backdrop);
+    backdrop.querySelector('#ipi-review-back').addEventListener('click', ()=>backdrop.remove());
+    backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) backdrop.remove(); });
+    backdrop.querySelector('#ipi-review-confirm').addEventListener('click', async ()=>{
+      backdrop.remove();
+      if(editorName){
+        await ipiSaveCheckpoint(editorName, checkpoint);
+        return;
+      }
+      showNamePrompt('Log checkpoint', 'Enter your personal PIN to log this checkpoint under your name.', async (name)=>{
+        await ipiSaveCheckpoint(name, checkpoint);
+      }, 'Confirming…');
+    });
+  }
+
+  async function ipiSaveCheckpoint(inspectorName, checkpoint){
+    const isEdit = !!ipiEditingId;
+    const now = new Date();
+    let id, checkedAt, originalInspector, editHistory;
+    if(isEdit){
+      id = ipiEditingId;
+      checkedAt = ipiEditingOriginal.checked_at;
+      originalInspector = ipiEditingOriginal.inspector;
+      const prevData = ipiEditingOriginal.data || {};
+      const prevSnapshot = Object.assign({}, prevData); delete prevSnapshot.editHistory;
+      editHistory = (prevData.editHistory || []).concat([{
+        editedAt: now.toISOString(), editedBy: inspectorName,
+        reason: document.getElementById('ipi-edit-reason').value.trim(),
+        previousSnapshot: prevSnapshot
+      }]);
+    } else {
+      id = 'ipi:' + now.getTime() + '-' + Math.random().toString(36).slice(2,7);
+      checkedAt = now.toISOString();
+      originalInspector = inspectorName;
+      editHistory = [];
+    }
+    const data = {
+      id, runId: ipiSelectedRun.run_id, fpiRecordId: ipiSelectedRun.id,
+      checkedAt, inspector: originalInspector,
+      overallResult: checkpoint.overallResult, remarks: checkpoint.remarks,
+      sharedItems: checkpoint.sharedItems, hotRunner: checkpoint.hotRunner,
+      blocks: checkpoint.blocksData, editHistory
+    };
+    const saveBtn = document.getElementById('ipi_save_btn');
+    saveBtn.disabled = true; saveBtn.textContent = isEdit ? 'Saving correction…' : 'Saving…';
+    try{
+      if(isEdit){
+        // return=representation (not minimal) so a PATCH silently blocked by a missing RLS
+        // UPDATE policy — which still responds 200/204 with zero rows changed — comes back as
+        // an empty array we can detect, instead of a false "saved" toast.
+        const patched = await sbFetch_(`ipi_records?id=eq.${encodeURIComponent(id)}`, {
+          method:'PATCH', headers:{'Prefer':'return=representation'},
+          body: JSON.stringify({ overall_result: checkpoint.overallResult, data })
+        });
+        if(!patched || !patched.length){
+          throw new Error('Correction did not apply — the database update permission for ipi_records may not be set up yet.');
+        }
+        toast('Correction saved — original preserved in edit history.');
+      } else {
+        await sbFetch_('ipi_records', { method:'POST', headers:{'Prefer':'return=minimal'}, body: JSON.stringify({
+          id, run_id: ipiSelectedRun.run_id, fpi_record_id: ipiSelectedRun.id, checked_at: checkedAt,
+          inspector: originalInspector, overall_result: checkpoint.overallResult, data
+        })});
+        toast('Checkpoint logged.');
+      }
+      ipiExitEdit();
+      ipiResetChecklist();
+      ipiResetSharedBlock();
+      document.getElementById('ipi_remarks').value = '';
+      await ipiLoadLog();
+    }catch(e){
+      console.error(e); toast(e && e.message && e.message.indexOf('permission')>=0 ? e.message : 'Save failed — check connection and try again.');
+    } finally {
+      saveBtn.disabled = false; saveBtn.textContent = ipiEditingId ? 'Save correction' : 'Log checkpoint';
+    }
+  }
+
+  // Curated extract — one CSV row per product checked per checkpoint, weights/times averaged.
+  // Same shape as FPI's own Part Info export.
+  function ipiToPartInfoCsv(rows){
+    const header = ['Date','Time','RunID','ItemCode','CavitiesRunning','CavitiesOriginal','PartWeightAvg','RunnerWeightAvg','CycleTimeAvg','ProductResult','CheckpointResult','Inspector','Remarks'];
+    const avg = a => a.length ? (a.reduce((x,y)=>x+y,0)/a.length).toFixed(3) : '';
+    const out = [];
+    rows.forEach(r=>{
+      const d = r.data || {};
+      const runnerVals = SAMPLES.map(s=>parseFloat((d.sharedItems||{})[1]?.samples[s]?.value)).filter(v=>!isNaN(v));
+      const cycleVals = SAMPLES.map(s=>parseFloat((d.sharedItems||{})[2]?.samples[s]?.value)).filter(v=>!isNaN(v));
+      const runnerAvg = d.hotRunner ? 'hot runner' : avg(runnerVals);
+      const cycleAvg = avg(cycleVals);
+      (d.blocks||[]).forEach(blk=>{
+        const weightRow = blk.results.find(x=>x.no===3);
+        const weightVals = weightRow ? SAMPLES.map(s=>parseFloat(weightRow.samples[s].value)).filter(v=>!isNaN(v)) : [];
+        out.push([
+          formatLocalDate_(r.checked_at), new Date(r.checked_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}),
+          d.runId, blk.itemCode, blk.cavitiesRunning, blk.originalCavity,
+          avg(weightVals), runnerAvg, cycleAvg,
+          blk.overallResult, r.overall_result, r.inspector, d.remarks
+        ]);
+      });
+    });
+    const esc = v => `"${String(v==null?'':v).replace(/"/g,'""')}"`;
+    return [header.map(esc).join(','), ...out.map(row=>row.map(esc).join(','))].join('\r\n');
+  }
+
+  // Full extract — every sample reading for every item, same "one column per item per sample"
+  // shape as FPI's own full CSV export, not just averages. One row per product per checkpoint.
+  function ipiToFullCsv(rows){
+    const header = ['CheckedAt','RunID','ItemCode','CavitiesRunning','CavitiesOriginal','ProductResult','CheckpointResult','Inspector','HotRunner','Remarks'];
+    SHARED_ITEMS.forEach(item=> SAMPLES.forEach(s=> header.push(`${item.no}_${item.name.replace(/[^a-z0-9]+/gi,'')}_S${s}`)));
+    ITEMS.forEach(item=> SAMPLES.forEach(s=> header.push(`${item.no}_${item.name.replace(/[^a-z0-9]+/gi,'')}_S${s}`)));
+    const out = [];
+    rows.forEach(r=>{
+      const d = r.data || {};
+      const sharedVals = [];
+      SHARED_ITEMS.forEach(item=>{
+        SAMPLES.forEach(s=>{
+          const cell = (d.sharedItems||{})[item.no]?.samples[s] || {};
+          sharedVals.push(cell.value != null ? cell.value : '');
+        });
+      });
+      (d.blocks||[]).forEach(blk=>{
+        const base = [
+          formatLocalDateTime_(r.checked_at), d.runId, blk.itemCode, blk.cavitiesRunning, blk.originalCavity,
+          blk.overallResult, r.overall_result, r.inspector, d.hotRunner ? 'Y' : 'N', d.remarks
+        ];
+        const vals = [];
+        ITEMS.forEach(item=>{
+          const row = blk.results.find(rr=>rr.no===item.no);
+          SAMPLES.forEach(s=>{
+            const cell = row ? row.samples[s] : {value:'',result:''};
+            vals.push(item.type==='measure' ? (cell.value!=null?cell.value:'') : (cell.result||''));
+          });
+        });
+        out.push(base.concat(sharedVals).concat(vals));
+      });
+    });
+    const esc = v => `"${String(v==null?'':v).replace(/"/g,'""')}"`;
+    return [header.map(esc).join(','), ...out.map(row=>row.map(esc).join(','))].join('\r\n');
+  }
+
+  document.getElementById('ipi_export_full_btn').addEventListener('click', async ()=>{
+    if(!ipiLogRowsCache.length){ toast('No checkpoints to export for this run yet.'); return; }
+    const filenameSafe = (ipiSelectedRun.run_id || 'ipi_run').replace(/[^a-z0-9_-]+/gi, '_');
+    await saveFile(`ipi_full_${filenameSafe}.csv`, 'text/csv;charset=utf-8;', ipiToFullCsv(ipiLogRowsCache));
+  });
+  document.getElementById('ipi_export_btn').addEventListener('click', async ()=>{
+    if(!ipiLogRowsCache.length){ toast('No checkpoints to export for this run yet.'); return; }
+    const filenameSafe = (ipiSelectedRun.run_id || 'ipi_run').replace(/[^a-z0-9_-]+/gi, '_');
+    await saveFile(`ipi_partinfo_${filenameSafe}.csv`, 'text/csv;charset=utf-8;', ipiToPartInfoCsv(ipiLogRowsCache));
+  });
+
+  // ==========================================================================
+  // IPI History — a separate tab, not a toggle inside In-Process, for retrieving concluded
+  // runs. Reuses ipiFetchRunsAndEndedSet_, ipiOpenDetail, ipiToFullCsv/ipiToPartInfoCsv from
+  // above; keeps its own state (ipih*) so selecting a run here never touches the In-Process
+  // tab's own selection.
+  // ==========================================================================
+  let ipihRunsCache = [];
+  let ipihSelectedRun = null;
+  let ipihSelectedRunData = null;
+  let ipihLogRowsCache = [];
+
+  async function ipihLoadRuns(){
+    const sel = document.getElementById('ipih_run_select');
+    const prevValue = sel.value;
+    try{
+      const { runRows, endedRunIds } = await ipiFetchRunsAndEndedSet_();
+      ipihRunsCache = runRows.filter(r=> endedRunIds.has(r.run_id));
+      sel.innerHTML = '<option value="">Select an ended run…</option>' + ipihRunsCache.map(r=>{
+        const label = 'M' + r.machine + ' — ' + (r.mixed_mode ? r.mould_ref : r.item_code) + ' · ' + formatLocalDate_(r.submitted_at);
+        return `<option value="${escapeHtml(r.id)}">${escapeHtml(label)}</option>`;
+      }).join('');
+      if(!ipihRunsCache.length) sel.innerHTML = '<option value="">No ended runs yet</option>';
+      if(prevValue && ipihRunsCache.some(r=>r.id===prevValue)) sel.value = prevValue;
+    }catch(e){ console.error(e); toast('Could not load ended runs.'); }
+  }
+
+  function ipihRenderHeader(){
+    const d = ipihSelectedRunData;
+    document.getElementById('ipih_h_item_label').textContent = d.mixedMode ? 'Mould / Job Reference' : 'Item Code';
+    document.getElementById('ipih_h_item').value = (d.mixedMode ? d.mouldRef : d.itemCode) || '';
+    document.getElementById('ipih_h_material').value = d.material || '';
+    document.getElementById('ipih_h_colour').value = d.colour || '';
+    document.getElementById('ipih_h_customer').value = d.customer || '';
+    document.getElementById('ipih_h_machine').value = d.machine || '';
+    document.getElementById('ipih_h_cavity').value = d.nosCavity || '';
+    document.getElementById('ipih_run_header').style.display = '';
+  }
+
+  async function ipihLoadLog(){
+    const logEl = document.getElementById('ipih_log');
+    logEl.innerHTML = '<div class="fpi-empty">Loading…</div>';
+    try{
+      const rows = await sbFetch_(`ipi_records?run_id=eq.${encodeURIComponent(ipihSelectedRun.run_id)}&select=id,checked_at,inspector,overall_result,data&order=checked_at.desc`);
+      ipihLogRowsCache = rows;
+      if(!rows.length){
+        logEl.innerHTML = '<div class="fpi-empty">No checkpoints were logged for this run.</div>';
+        return;
+      }
+      const groups = {}; const order = [];
+      rows.forEach(r=>{
+        const day = formatLocalDate_(r.checked_at);
+        if(!groups[day]){ groups[day]=[]; order.push(day); }
+        groups[day].push(r);
+      });
+      logEl.innerHTML = order.map(day=>{
+        const items = groups[day].map(r=>{
+          const isNg = r.overall_result && r.overall_result.indexOf('NG')>=0;
+          const bg = isNg ? 'var(--ng-bg)' : 'var(--ok-bg)';
+          const col = isNg ? 'var(--ng)' : 'var(--ok)';
+          const time = new Date(r.checked_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+          const product = r.data && r.data.blocks && r.data.blocks.length>1 ? ' · ' + r.data.blocks.map(b=>escapeHtml(b.itemCode)).join(', ') : '';
+          const cavFlags = (r.data && r.data.blocks || []).filter(b=> b.originalCavity && String(b.cavitiesRunning)!==String(b.originalCavity))
+            .map(b=> `${escapeHtml(b.itemCode)} ${escapeHtml(b.cavitiesRunning)}/${escapeHtml(b.originalCavity)}`);
+          const cavityFlag = cavFlags.length ? ` <span style="color:var(--amber); font-weight:700;">⚠ ${cavFlags.join(', ')} cav</span>` : '';
+          const editedTag = r.data && r.data.editHistory && r.data.editHistory.length ? ' <span style="font-size:9.5px;color:var(--amber);font-weight:700;">EDITED</span>' : '';
+          return `<div data-rowid="${escapeHtml(r.id)}" style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font-size:12.5px; margin-bottom:6px; cursor:pointer;">
+            <span>${escapeHtml(time)} · ${escapeHtml(r.inspector||'—')}${product}${cavityFlag}${editedTag}</span>
+            <span style="font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px; background:${bg}; color:${col};">${escapeHtml(r.overall_result||'—')}</span>
+          </div>`;
+        }).join('');
+        return `<div style="font-size:11.5px; color:#7a7d78; margin:10px 0 4px;">${escapeHtml(day)}</div>${items}`;
+      }).join('');
+      logEl.querySelectorAll('[data-rowid]').forEach(el=>{
+        el.addEventListener('mouseenter', ()=> el.style.background='#fbfaf7');
+        el.addEventListener('mouseleave', ()=> el.style.background='');
+        el.addEventListener('click', ()=>{
+          const row = ipihLogRowsCache.find(x=>x.id===el.dataset.rowid);
+          if(row) ipiOpenDetail(row, ipihSelectedRunData, { allowEdit:false });
+        });
+      });
+    }catch(e){
+      console.error(e);
+      logEl.innerHTML = '<div class="fpi-empty">Could not load the run log.</div>';
+    }
+  }
+
+  document.getElementById('ipih_run_select').addEventListener('change', async (e)=>{
+    const id = e.target.value;
+    ipihSelectedRun = ipihRunsCache.find(r=>r.id===id) || null;
+    updateTopbarForTab('ipihistory');
+    const headerEl = document.getElementById('ipih_run_header');
+    if(!ipihSelectedRun){
+      ipihSelectedRunData = null;
+      headerEl.style.display = 'none';
+      document.getElementById('ipih_log').innerHTML = '';
+      return;
+    }
+    try{
+      const rows = await sbFetch_(`fpi_records?id=eq.${encodeURIComponent(ipihSelectedRun.id)}&select=data`);
+      ipihSelectedRunData = rows && rows[0] ? rows[0].data : null;
+    }catch(err){ console.error(err); toast('Could not load the FPI record for this run.'); ipihSelectedRunData = null; }
+    if(!ipihSelectedRunData) return;
+    ipihRenderHeader();
+    await ipihLoadLog();
+  });
+
+  document.getElementById('ipih_export_full_btn').addEventListener('click', async ()=>{
+    if(!ipihLogRowsCache.length){ toast('No checkpoints to export for this run.'); return; }
+    const filenameSafe = (ipihSelectedRun.run_id || 'ipi_run').replace(/[^a-z0-9_-]+/gi, '_');
+    await saveFile(`ipi_full_${filenameSafe}.csv`, 'text/csv;charset=utf-8;', ipiToFullCsv(ipihLogRowsCache));
+  });
+  document.getElementById('ipih_export_btn').addEventListener('click', async ()=>{
+    if(!ipihLogRowsCache.length){ toast('No checkpoints to export for this run.'); return; }
+    const filenameSafe = (ipihSelectedRun.run_id || 'ipi_run').replace(/[^a-z0-9_-]+/gi, '_');
+    await saveFile(`ipi_partinfo_${filenameSafe}.csv`, 'text/csv;charset=utf-8;', ipiToPartInfoCsv(ipihLogRowsCache));
+  });
 })();
 </script>
 </body>
