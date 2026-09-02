@@ -2578,15 +2578,18 @@
     else { if(dashChartInstances.weight) dashChartInstances.weight.destroy(); }
   }
 
-  // Storage usage — a Google Sheet holds up to 10,000,000 cells total; our KV sheet uses
-  // 3 columns per row, so that's roughly 3.3M rows (records + audit log + lists combined)
-  // before the spreadsheet itself hits Google's hard limit. Way beyond realistic FPI volume,
-  // so this is a soft heads-up, not a real constraint like the old 20MB artifact cap was.
-  const STORAGE_LIMIT_ROWS = 3000000;
+  // Storage usage — measured against Supabase's Free tier, which caps the whole project's
+  // Postgres database (every table combined, not just ours) at 500 MB. This adds up the raw
+  // JSON size of what we actually write (FPI records, IPI checkpoints, deletion log, dropdown
+  // lists) as an estimate — real on-disk usage will differ a bit (indexes and row overhead push
+  // it up, jsonb TOAST compression pulls it back down), so treat this as a proxy, not the exact
+  // figure Supabase's own dashboard would show. Update this constant if the project ever moves
+  // to the Pro plan (8 GB included).
+  const STORAGE_LIMIT_BYTES = 500 * 1024 * 1024;
   function byteSize(str){ return new Blob([str || '']).size; }
 
   async function computeStorageUsage(){
-    let recordsBytes = 0, auditBytes = 0, listsBytes = 0, rowCount = 0;
+    let recordsBytes = 0, auditBytes = 0, listsBytes = 0, ipiBytes = 0, rowCount = 0;
     try{
       const recItems = await backendGetMany('fpi:');
       const recValues = Object.values(recItems).filter(Boolean);
@@ -2599,6 +2602,11 @@
       rowCount += auditValues.length;
       auditValues.forEach(v=> auditBytes += byteSize(v));
     }catch(e){}
+    try{
+      const ipiRows = await sbFetch_('ipi_records?select=id,data');
+      rowCount += ipiRows.length;
+      ipiRows.forEach(r=> ipiBytes += byteSize(JSON.stringify(r.data)));
+    }catch(e){}
     for(const key of Object.keys(DROPDOWN_LISTS)){
       try{
         const r = await window.storage.get(DROPDOWN_LISTS[key].storeKey, true);
@@ -2606,7 +2614,7 @@
       }catch(e){}
     }
     rowCount += Object.keys(DROPDOWN_LISTS).length;
-    return { recordsBytes, auditBytes, listsBytes, rowCount, totalBytes: recordsBytes + auditBytes + listsBytes };
+    return { recordsBytes, auditBytes, listsBytes, ipiBytes, rowCount, totalBytes: recordsBytes + auditBytes + listsBytes + ipiBytes };
   }
 
   function formatBytes(b){
@@ -2620,11 +2628,11 @@
     const text = document.getElementById('fpi-storage-text');
     text.textContent = 'Calculating…';
     const usage = await computeStorageUsage();
-    const pct = Math.min(100, (usage.rowCount / STORAGE_LIMIT_ROWS) * 100);
-    bar.style.width = Math.max(pct, usage.rowCount>0?0.3:0).toFixed(2) + '%';
+    const pct = Math.min(100, (usage.totalBytes / STORAGE_LIMIT_BYTES) * 100);
+    bar.style.width = Math.max(pct, usage.totalBytes>0?0.3:0).toFixed(2) + '%';
     bar.style.background = pct >= 90 ? 'var(--ng)' : (pct >= 70 ? 'var(--amber)' : 'var(--ok)');
-    text.innerHTML = `<b>${formatBytes(usage.totalBytes)}</b> total, across <b>${usage.rowCount.toLocaleString()}</b> row(s) in the spreadsheet — Records: ${formatBytes(usage.recordsBytes)} · Deletion Log: ${formatBytes(usage.auditBytes)} · Lists: ${formatBytes(usage.listsBytes)}` +
-      (pct >= 90 ? ' — <b style="color:var(--ng);">approaching Google Sheets\' row limit — consider archiving old records.</b>' :
+    text.innerHTML = `<b>${formatBytes(usage.totalBytes)}</b> of ${formatBytes(STORAGE_LIMIT_BYTES)} (Supabase Free tier estimate) — <b>${usage.rowCount.toLocaleString()}</b> row(s): FPI Records ${formatBytes(usage.recordsBytes)} · In-Process ${formatBytes(usage.ipiBytes)} · Deletion Log ${formatBytes(usage.auditBytes)} · Lists ${formatBytes(usage.listsBytes)}` +
+      (pct >= 90 ? ' — <b style="color:var(--ng);">approaching the Supabase Free tier\'s 500 MB limit — consider archiving old records or upgrading to Pro.</b>' :
        pct >= 70 ? ' — worth keeping an eye on as it grows.' : '');
   }
 
