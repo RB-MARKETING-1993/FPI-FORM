@@ -2892,25 +2892,41 @@
     statusBadge.className = 'fpi-badge ok';
     statusBadge.textContent = 'Active';
   }
-  let ipiEndRunArmed = false;
-  document.getElementById('ipi_end_run_btn').addEventListener('click', async ()=>{
+  // Explicit confirm dialog rather than a timed double-tap — a tap that arrives even slightly
+  // late after the first silently resets with no error, so a busy shop floor can tap "End run"
+  // repeatedly and never once actually persist it. This makes success/cancel unambiguous.
+  function showConfirmDialog(title, message, confirmLabel, onConfirm){
+    const backdrop = document.createElement('div');
+    backdrop.className = 'fpi-modal-backdrop';
+    backdrop.innerHTML = `<div class="fpi-modal" style="max-width:380px;">
+      <h3>${escapeHtml(title)}</h3>
+      <div style="font-size:12.5px; color:#7a7d78; margin-bottom:16px;">${escapeHtml(message)}</div>
+      <div style="display:flex; gap:10px; justify-content:flex-end;">
+        <button type="button" class="fpi-btn ghost" id="fpi-confirmdlg-cancel">Cancel</button>
+        <button type="button" class="fpi-btn primary" id="fpi-confirmdlg-confirm">${escapeHtml(confirmLabel)}</button>
+      </div>
+    </div>`;
+    document.body.appendChild(backdrop);
+    backdrop.querySelector('#fpi-confirmdlg-cancel').addEventListener('click', ()=>backdrop.remove());
+    backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) backdrop.remove(); });
+    backdrop.querySelector('#fpi-confirmdlg-confirm').addEventListener('click', ()=>{ backdrop.remove(); onConfirm(); });
+  }
+  document.getElementById('ipi_end_run_btn').addEventListener('click', ()=>{
     if(!ipiSelectedRun) return;
-    const btn = document.getElementById('ipi_end_run_btn');
-    if(!ipiEndRunArmed){
-      ipiEndRunArmed = true;
-      btn.textContent = 'Tap again to confirm';
-      toast('Tap "End run" once more to confirm — this marks production concluded and frees up the machine.');
-      setTimeout(()=>{ ipiEndRunArmed = false; btn.textContent = 'End run'; }, 4000);
-      return;
-    }
-    ipiEndRunArmed = false;
-    btn.textContent = 'End run';
-    await window.storage.set('ipi_run_status:'+ipiSelectedRun.run_id, 'ended', true);
-    toast('Run marked as concluded — Machine ' + ipiSelectedRun.machine + ' is now free for a new run.');
-    const sel = document.getElementById('ipi_run_select');
-    sel.value = '';
-    sel.dispatchEvent(new Event('change', {bubbles:true}));
-    await ipiLoadRuns();
+    showConfirmDialog(
+      'End this run?',
+      'This marks production concluded for Machine ' + ipiSelectedRun.machine + ' and moves it to IPI History. This cannot be undone from here.',
+      'End run',
+      async ()=>{
+        await window.storage.set('ipi_run_status:'+ipiSelectedRun.run_id, 'ended', true);
+        toast('Run marked as concluded — Machine ' + ipiSelectedRun.machine + ' is now free for a new run.');
+        const sel = document.getElementById('ipi_run_select');
+        sel.value = '';
+        sel.dispatchEvent(new Event('change', {bubbles:true}));
+        await ipiLoadRuns();
+        await ipihLoadRuns();
+      }
+    );
   });
 
   let ipiLogRowsCache = [];
