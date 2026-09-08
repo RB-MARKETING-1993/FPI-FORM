@@ -3791,9 +3791,18 @@
         if(!(r.machine in latestByMachine)) latestByMachine[r.machine] = r; // rows already sorted newest-first
       });
       ipihNotOccupiedRunIds = new Set(Object.values(latestByMachine).map(r=>r.id));
-      sel.innerHTML = '<option value="">Select an ended run…</option>' + ipihRunsCache.map(r=>{
-        const label = 'M' + r.machine + ' — ' + (r.mixed_mode ? r.mould_ref : r.item_code) + ' · ' + formatLocalDate_(r.submitted_at);
-        return `<option value="${escapeHtml(r.id)}">${escapeHtml(label)}</option>`;
+      // Grouped by machine (M1→M6), newest-first within each group — ipihRunsCache is already in
+      // that order since it's filtered straight from runRows, which ipiFetchRunsAndEndedSet_
+      // fetches sorted by submitted_at desc.
+      const byMachine = {};
+      ipihRunsCache.forEach(r=>{ (byMachine[r.machine] = byMachine[r.machine] || []).push(r); });
+      const machineOrder = Object.keys(byMachine).sort((a,b)=> (parseFloat(a)||0) - (parseFloat(b)||0));
+      sel.innerHTML = '<option value="">Select an ended run…</option>' + machineOrder.map(m=>{
+        const opts = byMachine[m].map(r=>{
+          const label = (r.mixed_mode ? r.mould_ref : r.item_code) + ' · ' + formatLocalDate_(r.submitted_at);
+          return `<option value="${escapeHtml(r.id)}">${escapeHtml(label)}</option>`;
+        }).join('');
+        return `<optgroup label="Machine ${escapeHtml(m)}">${opts}</optgroup>`;
       }).join('');
       if(!ipihRunsCache.length) sel.innerHTML = '<option value="">No ended runs yet</option>';
       if(prevValue && ipihRunsCache.some(r=>r.id===prevValue)) sel.value = prevValue;
