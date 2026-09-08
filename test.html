@@ -1742,9 +1742,9 @@
   // only when a row is actually clicked, instead of every record's full checklist being
   // downloaded just to show a summary list.
   async function fetchRecordSummaries_(){
-    const rows = await sbFetch_('fpi_records?select=id,run_id,item_code,mould_ref,mixed_mode,submitted_at,inspected_by,reviewed_by,reviewed_at,overall_result,editHistory:data->editHistory');
+    const rows = await sbFetch_('fpi_records?select=id,run_id,item_code,mould_ref,mixed_mode,machine,submitted_at,inspected_by,reviewed_by,reviewed_at,overall_result,editHistory:data->editHistory');
     return (rows||[]).map(r=>({
-      id: r.id, runId: r.run_id, itemCode: r.item_code, mouldRef: r.mould_ref, mixedMode: r.mixed_mode,
+      id: r.id, runId: r.run_id, itemCode: r.item_code, mouldRef: r.mould_ref, mixedMode: r.mixed_mode, machine: r.machine,
       submittedAt: r.submitted_at, inspectedBy: r.inspected_by, reviewedBy: r.reviewed_by, reviewedAt: r.reviewed_at,
       overallResult: r.overall_result, editHistory: r.editHistory || []
     }));
@@ -1945,32 +1945,47 @@
     return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
   }
 
+  // Grouped by machine (M1→M6, unassigned last), newest-first within each group — records is
+  // already sorted that way (see loadRecords), so grouping by forEach preserves it per machine.
   function renderRecordsTable(records){
     const listEl = document.getElementById('fpi-rec-list');
     const table = document.createElement('table');
     table.className = 'fpi-rectable';
     table.innerHTML = `<thead><tr><th></th><th>Date</th><th>Run ID</th><th>Item Code / Mould</th><th>Inspected By</th><th>Reviewed By</th><th>Result</th></tr></thead>`;
     const tb = document.createElement('tbody');
-    records.forEach(r=>{
-      const tr = document.createElement('tr');
-      const d = new Date(r.submittedAt);
-      const label = r.mixedMode ? `${r.mouldRef} (mixed)` : r.itemCode;
-      const editedTag = (r.editHistory && r.editHistory.length) ? ' <span style="font-size:9.5px;color:var(--amber);font-weight:700;">EDITED</span>' : '';
-      const resColor = r.overallResult.indexOf('NG')>=0 ? 'var(--ng)' : (r.overallResult.indexOf('OK')>=0 ? 'var(--ok)' : 'var(--amber)');
-      const isReviewed = !!r.reviewedBy;
-      const reviewedDateStr = r.reviewedAt ? new Date(r.reviewedAt).toLocaleDateString() : '';
-      const checkboxCell = isReviewed
-        ? `<td style="text-align:center; color:var(--ok);" title="Already reviewed">✓</td>`
-        : `<td style="text-align:center;"><input type="checkbox" class="fpi-rec-select" data-id="${r.id}"/></td>`;
-      tr.innerHTML = `${checkboxCell}
-        <td>${d.toLocaleDateString()} ${d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</td>
-        <td class="stamp">${escapeHtml(r.runId)}</td><td>${escapeHtml(label)}${editedTag}</td><td>${escapeHtml(r.inspectedBy)}</td>
-        <td>${escapeHtml(r.reviewedBy)||'—'}${reviewedDateStr?`<div style="font-size:10px;color:#8a8d87;">${reviewedDateStr}</div>`:''}</td>
-        <td style="color:${resColor}; font-family:var(--mono); font-weight:700;">${escapeHtml(r.overallResult)}</td>`;
-      const checkboxInput = tr.querySelector('.fpi-rec-select');
-      if(checkboxInput) checkboxInput.addEventListener('click', (e)=> e.stopPropagation());
-      tr.addEventListener('click', ()=> openDetail(r));
-      tb.appendChild(tr);
+    const byMachine = {};
+    records.forEach(r=>{ const m = r.machine || 'Unassigned'; (byMachine[m] = byMachine[m] || []).push(r); });
+    const machineOrder = Object.keys(byMachine).sort((a,b)=>{
+      const na = parseFloat(a), nb = parseFloat(b);
+      if(isNaN(na) && isNaN(nb)) return a.localeCompare(b);
+      if(isNaN(na)) return 1; if(isNaN(nb)) return -1;
+      return na - nb;
+    });
+    machineOrder.forEach(m=>{
+      const groupTr = document.createElement('tr');
+      groupTr.innerHTML = `<td colspan="6" style="background:#eef0ec; font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:#565a55; font-weight:700; padding:7px 8px;">${escapeHtml(isNaN(parseFloat(m)) ? m : 'Machine '+m)}</td>`;
+      tb.appendChild(groupTr);
+      byMachine[m].forEach(r=>{
+        const tr = document.createElement('tr');
+        const d = new Date(r.submittedAt);
+        const label = r.mixedMode ? `${r.mouldRef} (mixed)` : r.itemCode;
+        const editedTag = (r.editHistory && r.editHistory.length) ? ' <span style="font-size:9.5px;color:var(--amber);font-weight:700;">EDITED</span>' : '';
+        const resColor = r.overallResult.indexOf('NG')>=0 ? 'var(--ng)' : (r.overallResult.indexOf('OK')>=0 ? 'var(--ok)' : 'var(--amber)');
+        const isReviewed = !!r.reviewedBy;
+        const reviewedDateStr = r.reviewedAt ? new Date(r.reviewedAt).toLocaleDateString() : '';
+        const checkboxCell = isReviewed
+          ? `<td style="text-align:center; color:var(--ok);" title="Already reviewed">✓</td>`
+          : `<td style="text-align:center;"><input type="checkbox" class="fpi-rec-select" data-id="${r.id}"/></td>`;
+        tr.innerHTML = `${checkboxCell}
+          <td>${d.toLocaleDateString()} ${d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</td>
+          <td class="stamp">${escapeHtml(r.runId)}</td><td>${escapeHtml(label)}${editedTag}</td><td>${escapeHtml(r.inspectedBy)}</td>
+          <td>${escapeHtml(r.reviewedBy)||'—'}${reviewedDateStr?`<div style="font-size:10px;color:#8a8d87;">${reviewedDateStr}</div>`:''}</td>
+          <td style="color:${resColor}; font-family:var(--mono); font-weight:700;">${escapeHtml(r.overallResult)}</td>`;
+        const checkboxInput = tr.querySelector('.fpi-rec-select');
+        if(checkboxInput) checkboxInput.addEventListener('click', (e)=> e.stopPropagation());
+        tr.addEventListener('click', ()=> openDetail(r));
+        tb.appendChild(tr);
+      });
     });
     table.appendChild(tb); listEl.innerHTML=''; listEl.appendChild(table);
   }
