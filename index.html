@@ -181,7 +181,7 @@
     <div class="fpi-tab" data-tab="records">Records <span id="fpi-rec-count" class="stamp"></span></div>
     <div class="fpi-tabgroup-ipi">
       <div class="fpi-tab" data-tab="ipi">In-Process</div>
-      <div class="fpi-tab" data-tab="ipihistory">IPI History</div>
+      <div class="fpi-tab" data-tab="ipihistory">IPI History <span id="ipih-count" class="stamp"></span></div>
     </div>
     <div class="fpi-tab" data-tab="dashboard">Dashboard</div>
     <div class="fpi-tab" data-tab="lists" id="fpi-tab-lists" style="display:none;">Manage Lists</div>
@@ -288,7 +288,7 @@
 
     <div class="fpi-section-label">Run</div>
     <div style="display:flex; gap:10px; align-items:center; margin-bottom:6px; flex-wrap:wrap;">
-      <select id="ipi_run_select" style="flex:1; min-width:240px; padding:10px 12px; border:1px solid var(--line-strong); border-radius:6px; font-size:15px;"><option value="">Select the active run this belongs to…</option></select>
+      <select id="ipi_run_select" style="flex:1; min-width:240px; padding:10px 12px; border:1px solid var(--line-strong); border-radius:6px; font-size:16px;"><option value="">Select the active run this belongs to…</option></select>
       <span id="ipi_run_status_badge" class="fpi-badge pending" style="display:none;"></span>
       <button type="button" class="fpi-btn ghost" id="ipi_end_run_btn" style="display:none; padding:8px 14px; font-size:12px;">End run</button>
     </div>
@@ -342,7 +342,7 @@
 
     <div class="fpi-section-label">Ended Run</div>
     <div style="display:flex; gap:10px; align-items:center; margin-bottom:14px; flex-wrap:wrap;">
-      <select id="ipih_run_select" style="flex:1; min-width:240px; padding:10px 12px; border:1px solid var(--line-strong); border-radius:6px; font-size:15px;"><option value="">Select an ended run…</option></select>
+      <select id="ipih_run_select" style="flex:1; min-width:240px; padding:10px 12px; border:1px solid var(--line-strong); border-radius:6px; font-size:16px;"><option value="">Select an ended run…</option></select>
       <button type="button" class="fpi-btn ghost" id="ipih_reopen_btn" style="display:none; padding:8px 14px; font-size:12px;">Reopen run</button>
     </div>
 
@@ -427,12 +427,21 @@
         <div id="fpi-storage-text" style="font-size:12px; color:#7a7d78;">Calculating…</div>
       </div>
 
-      <div class="fpi-section-label">Part Weight Trend by Item Code</div>
-      <div style="margin-bottom:12px;">
+      <div class="fpi-section-label">Production Trend by Item Code</div>
+      <div style="margin-bottom:10px;">
         <select id="fpi-dash-itemcode" style="padding:10px 12px; border:1px solid var(--line-strong); border-radius:6px; font-size:16px;"></select>
       </div>
-      <div style="background:#fff; border:1px solid var(--line); border-radius:8px; padding:14px;">
+      <div style="font-size:11.5px; color:#7a7d78; margin-bottom:12px; display:flex; align-items:center; gap:14px;">
+        <span><span style="display:inline-block; width:9px; height:9px; border-radius:50%; background:#b3821b; margin-right:5px; vertical-align:middle;"></span>FPI baseline</span>
+        <span><span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#2f7a4f; margin-right:6px; vertical-align:middle;"></span>IPI checkpoint</span>
+      </div>
+      <div style="background:#fff; border:1px solid var(--line); border-radius:8px; padding:14px; margin-bottom:18px;">
+        <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6b6f6a; margin-bottom:8px;">Part Weight (g)</div>
         <canvas id="fpi-dash-weight-chart" height="90"></canvas>
+      </div>
+      <div style="background:#fff; border:1px solid var(--line); border-radius:8px; padding:14px;">
+        <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6b6f6a; margin-bottom:8px;">Cycle Time (s)</div>
+        <canvas id="fpi-dash-cycletime-chart" height="90"></canvas>
       </div>
     </div>
   </div>
@@ -1114,7 +1123,7 @@
     const units = new Set(rows.map(r=>r.querySelector('.fpi-mm-unit').value).filter((_,i)=>qtys[i]>0 || rows[i].querySelector('.fpi-mm-material').value.trim()));
     const mismatch = units.size > 1;
     if(mismatch){
-      totalEl.style.cssText = 'display:block; width:100%; margin-top:8px; padding:10px 14px; background:var(--ng-bg); border:2px solid var(--ng); border-radius:8px; color:var(--ng); font-size:15px; font-weight:800;';
+      totalEl.style.cssText = 'display:block; width:100%; margin-top:8px; padding:10px 14px; background:var(--ng-bg); border:2px solid var(--ng); border-radius:8px; color:var(--ng); font-size:14px; font-weight:700;';
       totalEl.textContent = `⚠ Units don't match (${Array.from(units).join(' + ')}) — use one unit for all materials`;
     } else {
       totalEl.style.cssText = 'font-size:12px; color:inherit;';
@@ -2504,15 +2513,29 @@
     if(attemptsLeft <= 0){ document.getElementById('fpi-dash-content').innerHTML = '<div class="fpi-empty">Chart library failed to load — check your connection and reopen this tab.</div>'; return; }
     setTimeout(()=>waitForChartLib(callback, attemptsLeft-1), 300);
   }
-  function computeDashboardData(records){
+  // weightByItem/cycleTimeByItem mix two sources so the trend reflects the whole product
+  // lifecycle, not just the one-off FPI approval: each FPI submission contributes a single
+  // "baseline" point (source:'FPI'), and every IPI checkpoint since contributes an ongoing
+  // "production" point (source:'IPI') — the chart renderer tells them apart visually.
+  // NG/defect/pass-rate stats intentionally stay FPI-only below (that's a distinct, one-time
+  // approval metric); only the two trend charts blend in IPI's ongoing readings.
+  function computeDashboardData(records, ipiRows){
     let totalBlocks = 0, ngBlocks = 0;
     const machineStats = {};
     const defectCounts = {};
     const weightByItem = {};
+    const cycleTimeByItem = {};
     const todayStr = formatLocalDate_(new Date().toISOString());
     const loggedToday = records.filter(r=> formatLocalDate_(r.submittedAt) === todayStr).length;
     const pendingReview = records.filter(r=> !r.reviewedBy).length;
+    const avgOf = vals => vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+    function addPoint(map, itemCode, date, value, source){
+      if(value===null) return;
+      if(!map[itemCode]) map[itemCode] = [];
+      map[itemCode].push({date, value, source});
+    }
     records.forEach(r=>{
+      const cycleAvg = avgOf(SAMPLES.map(s=>parseFloat((r.sharedItems||{})[2]?.samples[s]?.value)).filter(v=>!isNaN(v)));
       (r.blocks||[]).forEach(blk=>{
         totalBlocks++;
         const isNG = (blk.overallResult||'').indexOf('NG')>=0;
@@ -2528,20 +2551,30 @@
               if(cell && cell.result==='NG') defectCounts[row.name] = (defectCounts[row.name]||0)+1;
             });
           } else if(row.no===3){
-            const vals = SAMPLES.map(s=>parseFloat((row.samples[s]||{}).value)).filter(v=>!isNaN(v));
-            if(vals.length){
-              const avg = vals.reduce((a,b)=>a+b,0)/vals.length;
-              if(!weightByItem[blk.itemCode]) weightByItem[blk.itemCode] = [];
-              weightByItem[blk.itemCode].push({date:r.submittedAt, weight:avg});
-            }
+            const avg = avgOf(SAMPLES.map(s=>parseFloat((row.samples[s]||{}).value)).filter(v=>!isNaN(v)));
+            addPoint(weightByItem, blk.itemCode, r.submittedAt, avg, 'FPI');
           }
         });
+        addPoint(cycleTimeByItem, blk.itemCode, r.submittedAt, cycleAvg, 'FPI');
+      });
+    });
+    (ipiRows||[]).forEach(row=>{
+      const d = row.data || {};
+      const cycleAvg = avgOf(SAMPLES.map(s=>parseFloat((d.sharedItems||{})[2]?.samples[s]?.value)).filter(v=>!isNaN(v)));
+      (d.blocks||[]).forEach(blk=>{
+        const weightRow = (blk.results||[]).find(x=>x.no===3);
+        if(weightRow){
+          const avg = avgOf(SAMPLES.map(s=>parseFloat((weightRow.samples[s]||{}).value)).filter(v=>!isNaN(v)));
+          addPoint(weightByItem, blk.itemCode, row.checked_at, avg, 'IPI');
+        }
+        addPoint(cycleTimeByItem, blk.itemCode, row.checked_at, cycleAvg, 'IPI');
       });
     });
     Object.values(weightByItem).forEach(arr=> arr.sort((a,b)=> new Date(a.date)-new Date(b.date)));
+    Object.values(cycleTimeByItem).forEach(arr=> arr.sort((a,b)=> new Date(a.date)-new Date(b.date)));
     const topDefectEntry = Object.entries(defectCounts).sort((a,b)=>b[1]-a[1])[0];
     const topDefect = topDefectEntry ? `${topDefectEntry[0]} (${topDefectEntry[1]})` : '—';
-    return {totalBlocks, ngBlocks, machineStats, defectCounts, weightByItem, loggedToday, pendingReview, topDefect};
+    return {totalBlocks, ngBlocks, machineStats, defectCounts, weightByItem, cycleTimeByItem, loggedToday, pendingReview, topDefect};
   }
 
   function renderDashCards(records, data){
@@ -2561,26 +2594,44 @@
     });
   }
 
-  function renderWeightChart(data){
+  // Renders one line per item code with FPI's single baseline point drawn larger/gold and every
+  // IPI checkpoint since drawn smaller/green on the same line, so a glance shows both where the
+  // approved baseline sat and how production has drifted from it over time.
+  function renderTrendChart(chartKey, canvasId, points, seriesLabel, yAxisLabel, valueDecimals){
+    if(dashChartInstances[chartKey]) dashChartInstances[chartKey].destroy();
+    const ctx = document.getElementById(canvasId).getContext('2d');
+    dashChartInstances[chartKey] = new Chart(ctx, {
+      type: 'line',
+      data: { labels: points.map(p=> new Date(p.date).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})),
+        datasets: [{
+          label: seriesLabel, data: points.map(p=>Number(p.value.toFixed(valueDecimals))),
+          borderColor:'#2f7a4f', backgroundColor:'rgba(47,122,79,0.08)', tension:0.25, fill:true,
+          pointRadius: points.map(p=> p.source==='FPI' ? 6 : 3),
+          pointBackgroundColor: points.map(p=> p.source==='FPI' ? '#b3821b' : '#2f7a4f'),
+          pointBorderColor: points.map(p=> p.source==='FPI' ? '#b3821b' : '#2f7a4f')
+        }] },
+      options: { responsive:true, plugins:{ legend:{display:false},
+          tooltip:{ callbacks:{ afterLabel: (ctx2)=> points[ctx2.dataIndex].source==='FPI' ? 'FPI baseline' : 'IPI checkpoint' } } },
+        scales:{ y:{ title:{display:true,text:yAxisLabel} } } }
+    });
+  }
+
+  function renderTrendCharts(data){
     const select = document.getElementById('fpi-dash-itemcode');
-    const codes = Object.keys(data.weightByItem);
-    select.innerHTML = codes.length ? codes.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('') : '<option>No weight data yet</option>';
+    const codes = Array.from(new Set([...Object.keys(data.weightByItem), ...Object.keys(data.cycleTimeByItem)])).sort();
+    select.innerHTML = codes.length ? codes.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('') : '<option>No trend data yet</option>';
     function draw(){
       const code = select.value;
-      const points = data.weightByItem[code] || [];
-      if(dashChartInstances.weight) dashChartInstances.weight.destroy();
-      const ctx = document.getElementById('fpi-dash-weight-chart').getContext('2d');
-      dashChartInstances.weight = new Chart(ctx, {
-        type: 'line',
-        data: { labels: points.map(p=> new Date(p.date).toLocaleDateString()),
-          datasets: [{ label: `${code} — Part Weight (g)`, data: points.map(p=>p.weight.toFixed(2)),
-            borderColor:'#2f7a4f', backgroundColor:'rgba(47,122,79,0.1)', tension:0.25, fill:true, pointRadius:4 }] },
-        options: { responsive:true, plugins:{legend:{display:true}}, scales:{ y:{ title:{display:true,text:'grams'} } } }
-      });
+      const weightPoints = data.weightByItem[code] || [];
+      const cyclePoints = data.cycleTimeByItem[code] || [];
+      if(weightPoints.length) renderTrendChart('weight', 'fpi-dash-weight-chart', weightPoints, `${code} — Part Weight (g)`, 'grams', 2);
+      else if(dashChartInstances.weight){ dashChartInstances.weight.destroy(); dashChartInstances.weight = null; }
+      if(cyclePoints.length) renderTrendChart('cycleTime', 'fpi-dash-cycletime-chart', cyclePoints, `${code} — Cycle Time (s)`, 'seconds', 1);
+      else if(dashChartInstances.cycleTime){ dashChartInstances.cycleTime.destroy(); dashChartInstances.cycleTime = null; }
     }
     select.onchange = draw;
     if(codes.length) draw();
-    else { if(dashChartInstances.weight) dashChartInstances.weight.destroy(); }
+    else { ['weight','cycleTime'].forEach(k=>{ if(dashChartInstances[k]){ dashChartInstances[k].destroy(); dashChartInstances[k]=null; } }); }
   }
 
   // Storage usage — measured against Supabase's Free tier, which caps the whole project's
@@ -2642,7 +2693,9 @@
   }
 
   // Dashboard needs every record's full checklist (defect counts, weight trend) — cachedRecords
-  // is summary-only now, so this fetches its own full copy instead of relying on it.
+  // is summary-only now, so this fetches its own full copy instead of relying on it. IPI
+  // checkpoints are fetched alongside purely to feed the two trend charts (see
+  // computeDashboardData) — the summary cards below stay FPI-only.
   async function loadDashboard(){
     const records = await fetchFullRecords_();
     if(!records.length){
@@ -2653,11 +2706,13 @@
     }
     document.getElementById('fpi-dash-empty').style.display = 'none';
     document.getElementById('fpi-dash-content').style.display = '';
-    const data = computeDashboardData(records);
+    let ipiRows = [];
+    try{ ipiRows = await sbFetch_('ipi_records?select=run_id,checked_at,data'); }catch(e){ console.error(e); }
+    const data = computeDashboardData(records, ipiRows);
     renderDashCards(records, data);
     renderStorageUsage();
     waitForChartLib(()=>{
-      renderWeightChart(data);
+      renderTrendCharts(data);
     }, 15);
   }
 
@@ -3654,12 +3709,22 @@
         if(!(r.machine in latestByMachine)) latestByMachine[r.machine] = r; // rows already sorted newest-first
       });
       ipihNotOccupiedRunIds = new Set(Object.values(latestByMachine).map(r=>r.id));
-      sel.innerHTML = '<option value="">Select an ended run…</option>' + ipihRunsCache.map(r=>{
-        const label = 'M' + r.machine + ' — ' + (r.mixed_mode ? r.mould_ref : r.item_code) + ' · ' + formatLocalDate_(r.submitted_at);
-        return `<option value="${escapeHtml(r.id)}">${escapeHtml(label)}</option>`;
+      // Grouped by machine (M1→M6), newest-first within each group — ipihRunsCache is already in
+      // that order since it's filtered straight from runRows, which ipiFetchRunsAndEndedSet_
+      // fetches sorted by submitted_at desc.
+      const byMachine = {};
+      ipihRunsCache.forEach(r=>{ (byMachine[r.machine] = byMachine[r.machine] || []).push(r); });
+      const machineOrder = Object.keys(byMachine).sort((a,b)=> (parseFloat(a)||0) - (parseFloat(b)||0));
+      sel.innerHTML = '<option value="">Select an ended run…</option>' + machineOrder.map(m=>{
+        const opts = byMachine[m].map(r=>{
+          const label = (r.mixed_mode ? r.mould_ref : r.item_code) + ' · ' + formatLocalDate_(r.submitted_at);
+          return `<option value="${escapeHtml(r.id)}">${escapeHtml(label)}</option>`;
+        }).join('');
+        return `<optgroup label="Machine ${escapeHtml(m)}">${opts}</optgroup>`;
       }).join('');
       if(!ipihRunsCache.length) sel.innerHTML = '<option value="">No ended runs yet</option>';
       if(prevValue && ipihRunsCache.some(r=>r.id===prevValue)) sel.value = prevValue;
+      document.getElementById('ipih-count').textContent = ipihRunsCache.length ? '(' + ipihRunsCache.length + ')' : '';
     }catch(e){ console.error(e); toast('Could not load ended runs.'); }
   }
 
