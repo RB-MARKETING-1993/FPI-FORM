@@ -177,11 +177,11 @@
     <div class="fpi-runid" id="fpi-runid-display">Run ID: —</div>
   </div>
   <div class="fpi-tabs">
-    <div class="fpi-tab active" data-tab="new">New Inspection</div>
-    <div class="fpi-tab" data-tab="records">Records <span id="fpi-rec-count" class="stamp"></span></div>
+    <div class="fpi-tab active" data-tab="new">First Piece Inspection</div>
+    <div class="fpi-tab" data-tab="records">FPI Records <span id="fpi-rec-count" class="stamp"></span></div>
     <div class="fpi-tabgroup-ipi">
-      <div class="fpi-tab" data-tab="ipi">In-Process</div>
-      <div class="fpi-tab" data-tab="ipihistory">IPI History <span id="ipih-count" class="stamp"></span></div>
+      <div class="fpi-tab" data-tab="ipi">In-Process Inspection</div>
+      <div class="fpi-tab" data-tab="ipihistory">IPI Records <span id="ipih-count" class="stamp"></span></div>
     </div>
     <div class="fpi-tab" data-tab="dashboard">Dashboard</div>
     <div class="fpi-tab" data-tab="lists" id="fpi-tab-lists" style="display:none;">Manage Lists</div>
@@ -892,10 +892,10 @@
   // shown above every tab — now that the app also covers In-Process Inspection (its own real
   // SOP doc, RB-P03-06), it switches per active tab instead of always showing FPI's own info.
   const TOPBAR_CONFIG = {
-    new:        { h1:'First Piece Inspection Check List', docNo:'RB-P03-04 (Rev00)', effDate:'1 Jul 2023', basis:'5-piece sample from Production', docVisible:true, runId:'new' },
+    new:        { h1:'First Piece Inspection', docNo:'RB-P03-04 (Rev00)', effDate:'1 Jul 2023', basis:'5-piece sample from Production', docVisible:true, runId:'new' },
     records:    { h1:'First Piece Inspection — Records', docNo:'RB-P03-04 (Rev00)', effDate:'1 Jul 2023', basis:'5-piece sample from Production', docVisible:true, runId:false },
-    ipi:        { h1:'In-Process Sample Inspection', docNo:'RB-P03-06 (Rev00)', effDate:'1 Jul 2023', basis:'Periodic in-line sampling — checklist same as FPI', docVisible:true, runId:'ipi' },
-    ipihistory: { h1:'In-Process Sample Inspection — History', docNo:'RB-P03-06 (Rev00)', effDate:'1 Jul 2023', basis:'Periodic in-line sampling — checklist same as FPI', docVisible:true, runId:'ipihistory' },
+    ipi:        { h1:'In-Process Inspection', docNo:'RB-P03-06 (Rev00)', effDate:'1 Jul 2023', basis:'Periodic in-line sampling — checklist same as FPI', docVisible:true, runId:'ipi' },
+    ipihistory: { h1:'In-Process Inspection Records', docNo:'RB-P03-06 (Rev00)', effDate:'1 Jul 2023', basis:'Periodic in-line sampling — checklist same as FPI', docVisible:true, runId:'ipihistory' },
     dashboard:  { h1:'Quality Dashboard', docVisible:false, runId:false },
     lists:      { h1:'Manage Lists & Security', docVisible:false, runId:false },
     auditlog:   { h1:'Deletion Log', docVisible:false, runId:false }
@@ -1605,9 +1605,9 @@
   // only when a row is actually clicked, instead of every record's full checklist being
   // downloaded just to show a summary list.
   async function fetchRecordSummaries_(){
-    const rows = await sbFetch_('fpi_records?select=id,run_id,item_code,mould_ref,mixed_mode,submitted_at,inspected_by,reviewed_by,reviewed_at,overall_result,editHistory:data->editHistory');
+    const rows = await sbFetch_('fpi_records?select=id,run_id,item_code,mould_ref,mixed_mode,machine,submitted_at,inspected_by,reviewed_by,reviewed_at,overall_result,editHistory:data->editHistory');
     return (rows||[]).map(r=>({
-      id: r.id, runId: r.run_id, itemCode: r.item_code, mouldRef: r.mould_ref, mixedMode: r.mixed_mode,
+      id: r.id, runId: r.run_id, itemCode: r.item_code, mouldRef: r.mould_ref, mixedMode: r.mixed_mode, machine: r.machine,
       submittedAt: r.submitted_at, inspectedBy: r.inspected_by, reviewedBy: r.reviewed_by, reviewedAt: r.reviewed_at,
       overallResult: r.overall_result, editHistory: r.editHistory || []
     }));
@@ -1808,32 +1808,47 @@
     return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
   }
 
+  // Grouped by machine (M1→M6, unassigned last), newest-first within each group — records is
+  // already sorted that way (see loadRecords), so grouping by forEach preserves it per machine.
   function renderRecordsTable(records){
     const listEl = document.getElementById('fpi-rec-list');
     const table = document.createElement('table');
     table.className = 'fpi-rectable';
     table.innerHTML = `<thead><tr><th></th><th>Date</th><th>Run ID</th><th>Item Code / Mould</th><th>Inspected By</th><th>Reviewed By</th><th>Result</th></tr></thead>`;
     const tb = document.createElement('tbody');
-    records.forEach(r=>{
-      const tr = document.createElement('tr');
-      const d = new Date(r.submittedAt);
-      const label = r.mixedMode ? `${r.mouldRef} (mixed)` : r.itemCode;
-      const editedTag = (r.editHistory && r.editHistory.length) ? ' <span style="font-size:9.5px;color:var(--amber);font-weight:700;">EDITED</span>' : '';
-      const resColor = r.overallResult.indexOf('NG')>=0 ? 'var(--ng)' : (r.overallResult.indexOf('OK')>=0 ? 'var(--ok)' : 'var(--amber)');
-      const isReviewed = !!r.reviewedBy;
-      const reviewedDateStr = r.reviewedAt ? new Date(r.reviewedAt).toLocaleDateString() : '';
-      const checkboxCell = isReviewed
-        ? `<td style="text-align:center; color:var(--ok);" title="Already reviewed">✓</td>`
-        : `<td style="text-align:center;"><input type="checkbox" class="fpi-rec-select" data-id="${r.id}"/></td>`;
-      tr.innerHTML = `${checkboxCell}
-        <td>${d.toLocaleDateString()} ${d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</td>
-        <td class="stamp">${escapeHtml(r.runId)}</td><td>${escapeHtml(label)}${editedTag}</td><td>${escapeHtml(r.inspectedBy)}</td>
-        <td>${escapeHtml(r.reviewedBy)||'—'}${reviewedDateStr?`<div style="font-size:10px;color:#8a8d87;">${reviewedDateStr}</div>`:''}</td>
-        <td style="color:${resColor}; font-family:var(--mono); font-weight:700;">${escapeHtml(r.overallResult)}</td>`;
-      const checkboxInput = tr.querySelector('.fpi-rec-select');
-      if(checkboxInput) checkboxInput.addEventListener('click', (e)=> e.stopPropagation());
-      tr.addEventListener('click', ()=> openDetail(r));
-      tb.appendChild(tr);
+    const byMachine = {};
+    records.forEach(r=>{ const m = r.machine || 'Unassigned'; (byMachine[m] = byMachine[m] || []).push(r); });
+    const machineOrder = Object.keys(byMachine).sort((a,b)=>{
+      const na = parseFloat(a), nb = parseFloat(b);
+      if(isNaN(na) && isNaN(nb)) return a.localeCompare(b);
+      if(isNaN(na)) return 1; if(isNaN(nb)) return -1;
+      return na - nb;
+    });
+    machineOrder.forEach(m=>{
+      const groupTr = document.createElement('tr');
+      groupTr.innerHTML = `<td colspan="6" style="background:#eef0ec; font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:#565a55; font-weight:700; padding:7px 8px;">${escapeHtml(isNaN(parseFloat(m)) ? m : 'Machine '+m)}</td>`;
+      tb.appendChild(groupTr);
+      byMachine[m].forEach(r=>{
+        const tr = document.createElement('tr');
+        const d = new Date(r.submittedAt);
+        const label = r.mixedMode ? `${r.mouldRef} (mixed)` : r.itemCode;
+        const editedTag = (r.editHistory && r.editHistory.length) ? ' <span style="font-size:9.5px;color:var(--amber);font-weight:700;">EDITED</span>' : '';
+        const resColor = r.overallResult.indexOf('NG')>=0 ? 'var(--ng)' : (r.overallResult.indexOf('OK')>=0 ? 'var(--ok)' : 'var(--amber)');
+        const isReviewed = !!r.reviewedBy;
+        const reviewedDateStr = r.reviewedAt ? new Date(r.reviewedAt).toLocaleDateString() : '';
+        const checkboxCell = isReviewed
+          ? `<td style="text-align:center; color:var(--ok);" title="Already reviewed">✓</td>`
+          : `<td style="text-align:center;"><input type="checkbox" class="fpi-rec-select" data-id="${r.id}"/></td>`;
+        tr.innerHTML = `${checkboxCell}
+          <td>${d.toLocaleDateString()} ${d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</td>
+          <td class="stamp">${escapeHtml(r.runId)}</td><td>${escapeHtml(label)}${editedTag}</td><td>${escapeHtml(r.inspectedBy)}</td>
+          <td>${escapeHtml(r.reviewedBy)||'—'}${reviewedDateStr?`<div style="font-size:10px;color:#8a8d87;">${reviewedDateStr}</div>`:''}</td>
+          <td style="color:${resColor}; font-family:var(--mono); font-weight:700;">${escapeHtml(r.overallResult)}</td>`;
+        const checkboxInput = tr.querySelector('.fpi-rec-select');
+        if(checkboxInput) checkboxInput.addEventListener('click', (e)=> e.stopPropagation());
+        tr.addEventListener('click', ()=> openDetail(r));
+        tb.appendChild(tr);
+      });
     });
     table.appendChild(tb); listEl.innerHTML=''; listEl.appendChild(table);
   }
@@ -2687,7 +2702,7 @@
     const pct = Math.min(100, (usage.totalBytes / STORAGE_LIMIT_BYTES) * 100);
     bar.style.width = Math.max(pct, usage.totalBytes>0?0.3:0).toFixed(2) + '%';
     bar.style.background = pct >= 90 ? 'var(--ng)' : (pct >= 70 ? 'var(--amber)' : 'var(--ok)');
-    text.innerHTML = `<b>${formatBytes(usage.totalBytes)}</b> of ${formatBytes(STORAGE_LIMIT_BYTES)} (Supabase Free tier estimate) — <b>${usage.rowCount.toLocaleString()}</b> row(s): FPI Records ${formatBytes(usage.recordsBytes)} · In-Process ${formatBytes(usage.ipiBytes)} · Deletion Log ${formatBytes(usage.auditBytes)} · Lists ${formatBytes(usage.listsBytes)}` +
+    text.innerHTML = `<b>${formatBytes(usage.totalBytes)}</b> of ${formatBytes(STORAGE_LIMIT_BYTES)} (Supabase Free tier estimate) — <b>${usage.rowCount.toLocaleString()}</b> row(s): FPI Records ${formatBytes(usage.recordsBytes)} · IPI Records ${formatBytes(usage.ipiBytes)} · Deletion Log ${formatBytes(usage.auditBytes)} · Lists ${formatBytes(usage.listsBytes)}` +
       (pct >= 90 ? ' — <b style="color:var(--ng);">approaching the Supabase Free tier\'s 500 MB limit — consider archiving old records or upgrading to Pro.</b>' :
        pct >= 70 ? ' — worth keeping an eye on as it grows.' : '');
   }
@@ -2975,7 +2990,7 @@
     if(!ipiSelectedRun) return;
     showConfirmDialog(
       'End this run?',
-      'This marks production concluded for Machine ' + ipiSelectedRun.machine + ' and moves it to IPI History. This cannot be undone from here.',
+      'This marks production concluded for Machine ' + ipiSelectedRun.machine + ' and moves it to IPI Records. This cannot be undone from here.',
       'End run',
       async ()=>{
         await window.storage.set('ipi_run_status:'+ipiSelectedRun.run_id, 'ended', true);
@@ -3825,7 +3840,7 @@
     if(!ipihSelectedRun) return;
     showConfirmDialog(
       'Reopen this run?',
-      'This makes Machine ' + ipihSelectedRun.machine + ' show this run as active again in In-Process. Only do this if the machine hasn’t already started a new job.',
+      'This makes Machine ' + ipihSelectedRun.machine + ' show this run as active again in In-Process Inspection. Only do this if the machine hasn’t already started a new job.',
       'Reopen run',
       async ()=>{
         try{
@@ -3836,7 +3851,7 @@
           });
           if(!rows || !rows.length) throw new Error('Reopen did not apply.');
         }catch(err){ console.error(err); toast('Could not reopen this run — please try again.'); return; }
-        toast('Run reopened — it now appears as active in In-Process.');
+        toast('Run reopened — it now appears as active in In-Process Inspection.');
         const sel = document.getElementById('ipih_run_select');
         sel.value = '';
         sel.dispatchEvent(new Event('change', {bubbles:true}));
