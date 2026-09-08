@@ -186,7 +186,7 @@
     <div class="fpi-tab" data-tab="records">Records <span id="fpi-rec-count" class="stamp"></span></div>
     <div class="fpi-tabgroup-ipi">
       <div class="fpi-tab" data-tab="ipi">In-Process</div>
-      <div class="fpi-tab" data-tab="ipihistory">IPI History</div>
+      <div class="fpi-tab" data-tab="ipihistory">IPI History <span id="ipih-count" class="stamp"></span></div>
     </div>
     <div class="fpi-tab" data-tab="dashboard">Dashboard</div>
     <div class="fpi-tab" data-tab="lists" id="fpi-tab-lists" style="display:none;">Manage Lists</div>
@@ -3797,6 +3797,7 @@
       }).join('');
       if(!ipihRunsCache.length) sel.innerHTML = '<option value="">No ended runs yet</option>';
       if(prevValue && ipihRunsCache.some(r=>r.id===prevValue)) sel.value = prevValue;
+      document.getElementById('ipih-count').textContent = ipihRunsCache.length ? '(' + ipihRunsCache.length + ')' : '';
     }catch(e){ console.error(e); toast('Could not load ended runs.'); }
   }
 
