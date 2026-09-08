@@ -165,6 +165,11 @@
 </head>
 <body>
 
+<div style="background:#4a2f7a; color:#fff; text-align:center; padding:7px 12px; font-size:12.5px; font-weight:600; position:sticky; top:0; z-index:9999;">
+  🧪 TEST MODE — nothing you do here reaches the real database. Changes are saved only in this browser.
+  <button type="button" id="sandbox-reset-btn" style="margin-left:10px; background:#fff; color:#4a2f7a; border:none; border-radius:4px; padding:3px 10px; font-size:11px; font-weight:700; cursor:pointer;">Reset test data</button>
+</div>
+
 <div id="fpi-root">
   <div class="fpi-topbar">
     <div class="co">RB Diversified Sdn Bhd</div>
@@ -323,6 +328,7 @@
       <div class="fpi-footerbar">
         <div class="fpi-overall" style="font-size:12.5px; color:#7a7d78;">Checkpoint result shown in each checklist heading above.</div>
         <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <button type="button" class="fpi-btn ghost" id="ipi_backfill_btn">Log a past checkpoint (paper form)</button>
           <button type="button" class="fpi-btn primary" id="ipi_save_btn">Log checkpoint</button>
         </div>
       </div>
@@ -337,10 +343,13 @@
   </div>
 
   <div class="fpi-panel" id="fpi-panel-ipihistory" style="display:none;">
-    <div class="fpi-recnote" style="margin-bottom:14px;">Concluded production runs — retrieve and export past In-Process Inspection checkpoints. Ended here means the machine has since moved on to other work; new checkpoints can't be added to a run once it's ended.</div>
+    <div class="fpi-recnote" style="margin-bottom:14px;">Concluded production runs — retrieve and export past In-Process Inspection checkpoints. If the machine hasn't started new production yet, you can reopen the run to keep logging normally; otherwise use "Log a past checkpoint" below to backfill an entry from a paper form.</div>
 
     <div class="fpi-section-label">Ended Run</div>
-    <select id="ipih_run_select" style="width:100%; max-width:520px; padding:10px 12px; border:1px solid var(--line-strong); border-radius:6px; font-size:15px; margin-bottom:14px;"><option value="">Select an ended run…</option></select>
+    <div style="display:flex; gap:10px; align-items:center; margin-bottom:14px; flex-wrap:wrap;">
+      <select id="ipih_run_select" style="flex:1; min-width:240px; padding:10px 12px; border:1px solid var(--line-strong); border-radius:6px; font-size:15px;"><option value="">Select an ended run…</option></select>
+      <button type="button" class="fpi-btn ghost" id="ipih_reopen_btn" style="display:none; padding:8px 14px; font-size:12px;">Reopen run</button>
+    </div>
 
     <div class="fpi-fieldgrid" id="ipih_run_header" style="display:none;">
       <div class="fpi-field"><label id="ipih_h_item_label">Item Code</label><input readonly id="ipih_h_item"/></div>
@@ -353,6 +362,7 @@
 
     <div style="display:flex; align-items:center; justify-content:space-between; margin:26px 0 10px; gap:8px; flex-wrap:wrap;">
       <div class="fpi-section-label" style="margin:0; flex:1;">Run log</div>
+      <button type="button" class="fpi-btn ghost" id="ipih_backfill_btn" style="display:none; padding:6px 14px; font-size:12px;">Log a past checkpoint</button>
       <button type="button" class="fpi-btn ghost" id="ipih_export_full_btn" style="padding:6px 14px; font-size:12px;">Export Full CSV</button>
       <button type="button" class="fpi-btn ghost" id="ipih_export_btn" style="padding:6px 14px; font-size:12px;">Export Part Info CSV</button>
     </div>
@@ -449,7 +459,52 @@
   const PHOTO_BACKEND_URL = 'https://script.google.com/macros/s/AKfycby-CHPwyxwQJPLMRV2QaJ8ReiGxVf2z5B311YiyGf3TV6sygIcas29DEIzVpkB8q9Ez/exec';
   const PHOTO_BACKEND_KEY = 'fb1839a5c431de3a88646c5860e1d8c24a37f5933043927b81cc26b93930';
 
-  async function sbFetch_(path, opts){
+  // ==========================================================================
+  // SANDBOX MODE — this file only, never production's index.html. Reads still hit the real
+  // Supabase project (so testing sees real current runs, dropdowns, and your real PIN works);
+  // every write (POST/PATCH/DELETE against a data table, and any PIN-mutating RPC) is captured
+  // in localStorage instead and layered on top of real reads for this browser only. Nothing
+  // written here is ever sent to Supabase, so staff on the live app never see it.
+  // Set SANDBOX_MODE = false to make this file behave exactly like production again.
+  // ==========================================================================
+  const SANDBOX_MODE = true;
+  const SANDBOX_TABLES = ['fpi_records','audit_log','dropdown_lists','app_settings','ipi_records'];
+  const SANDBOX_ID_COL = { fpi_records:'id', audit_log:'id', dropdown_lists:'list_key', app_settings:'key', ipi_records:'id' };
+  const SANDBOX_BLOCKED_RPCS = ['set_master_pin','add_user_pin','remove_user_pin']; // would otherwise change real staff/master PINs shared with production
+  const SANDBOX_STORAGE_KEY = 'ipi_sandbox_shadow_v1';
+
+  function sbxLoadAll_(){
+    try{ return JSON.parse(localStorage.getItem(SANDBOX_STORAGE_KEY)) || {}; }catch(e){ return {}; }
+  }
+  function sbxSaveAll_(all){
+    try{ localStorage.setItem(SANDBOX_STORAGE_KEY, JSON.stringify(all)); }catch(e){}
+  }
+  function sbxTable_(all, table){
+    if(!all[table]) all[table] = { upserts:{}, deletes:{} };
+    return all[table];
+  }
+  // Supports exactly the filter shapes this app actually sends (eq./like.) — enough to decide
+  // whether a locally-added row belongs in a given filtered GET result.
+  function sbxRowMatchesQuery_(row, qs){
+    const params = new URLSearchParams(qs);
+    for(const [key, val] of params.entries()){
+      if(['select','order','limit','offset'].includes(key)) continue;
+      if(val.startsWith('eq.')){
+        if(String(row[key]) !== decodeURIComponent(val.slice(3))) return false;
+      } else if(val.startsWith('like.')){
+        const pattern = decodeURIComponent(val.slice(5));
+        const rx = new RegExp('^'+pattern.split('*').map(s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('.*')+'$');
+        if(!rx.test(String(row[key]))) return false;
+      }
+    }
+    return true;
+  }
+  function sbxEqFilter_(qs, col){
+    const raw = new URLSearchParams(qs).get(col);
+    return (raw && raw.startsWith('eq.')) ? decodeURIComponent(raw.slice(3)) : null;
+  }
+
+  async function sbFetchReal_(path, opts){
     const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, Object.assign({}, opts, {
       headers: Object.assign({
         'apikey': SUPABASE_KEY,
@@ -462,8 +517,95 @@
     if(!res.ok) throw new Error((data && data.message) || ('Supabase error ' + res.status));
     return data;
   }
+
+  async function sbFetch_(path, opts){
+    opts = opts || {};
+    if(!SANDBOX_MODE) return sbFetchReal_(path, opts);
+
+    const method = (opts.method || 'GET').toUpperCase();
+    const qIdx = path.indexOf('?');
+    const table = qIdx === -1 ? path : path.slice(0, qIdx);
+    const qs = qIdx === -1 ? '' : path.slice(qIdx+1);
+    const prefer = (opts.headers && opts.headers['Prefer']) || '';
+
+    if(table.startsWith('rpc/')){
+      const fn = table.slice(4);
+      if(SANDBOX_BLOCKED_RPCS.includes(fn)) return null; // pretend success, no real change
+      return sbFetchReal_(path, opts); // PIN verification etc. — real read-effect only, safe
+    }
+
+    if(!SANDBOX_TABLES.includes(table)) return sbFetchReal_(path, opts);
+
+    const idCol = SANDBOX_ID_COL[table];
+    const all = sbxLoadAll_();
+    const tstore = sbxTable_(all, table);
+
+    if(method === 'GET'){
+      let real = [];
+      try{ real = await sbFetchReal_(path, opts); if(!Array.isArray(real)) real = []; }catch(e){ real = []; }
+      const merged = real.filter(r => !tstore.deletes[r[idCol]]);
+      Object.keys(tstore.upserts).forEach(id=>{
+        if(tstore.deletes[id]) return;
+        const shadowRow = tstore.upserts[id];
+        const i = merged.findIndex(r=>String(r[idCol])===String(id));
+        if(i>=0) merged[i] = Object.assign({}, merged[i], shadowRow);
+        else if(sbxRowMatchesQuery_(shadowRow, qs)) merged.push(shadowRow);
+      });
+      return merged;
+    }
+
+    if(method === 'POST'){
+      const parsed = JSON.parse(opts.body || '{}');
+      const rows = Array.isArray(parsed) ? parsed : [parsed];
+      rows.forEach(row=>{
+        const id = row[idCol];
+        tstore.upserts[id] = Object.assign({}, tstore.upserts[id], row);
+        delete tstore.deletes[id];
+      });
+      sbxSaveAll_(all);
+      return prefer.includes('return=representation') ? rows : null;
+    }
+
+    if(method === 'PATCH'){
+      const id = sbxEqFilter_(qs, idCol);
+      const patchBody = JSON.parse(opts.body || '{}');
+      let base = tstore.upserts[id];
+      if(!base){
+        try{
+          const real = await sbFetchReal_(table + '?' + idCol + '=eq.' + encodeURIComponent(id), {});
+          base = (real && real[0]) || { [idCol]: id };
+        }catch(e){ base = { [idCol]: id }; }
+      }
+      const updated = Object.assign({}, base, patchBody);
+      tstore.upserts[id] = updated;
+      delete tstore.deletes[id];
+      sbxSaveAll_(all);
+      return prefer.includes('return=representation') ? [updated] : null;
+    }
+
+    if(method === 'DELETE'){
+      const id = sbxEqFilter_(qs, idCol);
+      if(id !== null){
+        tstore.deletes[id] = true;
+        delete tstore.upserts[id];
+        sbxSaveAll_(all);
+      }
+      return null;
+    }
+
+    return sbFetchReal_(path, opts);
+  }
   async function sbRpc_(fn, args){
     return sbFetch_('rpc/' + fn, { method:'POST', body: JSON.stringify(args||{}) });
+  }
+  if(SANDBOX_MODE){
+    const resetBtn = document.getElementById('sandbox-reset-btn');
+    if(resetBtn) resetBtn.addEventListener('click', ()=>{
+      if(confirm('Clear all sandboxed test data and reload? This only affects this browser.')){
+        localStorage.removeItem(SANDBOX_STORAGE_KEY);
+        location.reload();
+      }
+    });
   }
 
   function recordToRow_(id, record){
@@ -2958,8 +3100,9 @@
             .map(b=> `${escapeHtml(b.itemCode)} ${escapeHtml(b.cavitiesRunning)}/${escapeHtml(b.originalCavity)}`);
           const cavityFlag = cavFlags.length ? ` <span style="color:var(--amber); font-weight:700;">⚠ ${cavFlags.join(', ')} cav</span>` : '';
           const editedTag = r.data && r.data.editHistory && r.data.editHistory.length ? ' <span style="font-size:9.5px;color:var(--amber);font-weight:700;">EDITED</span>' : '';
+          const backfilledTag = r.data && r.data.backfilled ? ' <span style="font-size:9.5px;color:#6b5fa8;font-weight:700;">PAPER FORM</span>' : '';
           return `<div data-rowid="${escapeHtml(r.id)}" style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font-size:12.5px; margin-bottom:6px; cursor:pointer;">
-            <span>${escapeHtml(time)} · ${escapeHtml(r.inspector||'—')}${product}${cavityFlag}${editedTag}</span>
+            <span>${escapeHtml(time)} · ${escapeHtml(r.inspector||'—')}${product}${cavityFlag}${editedTag}${backfilledTag}</span>
             <span style="font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px; background:${bg}; color:${col};">${escapeHtml(r.overall_result||'—')}</span>
           </div>`;
         }).join('');
@@ -2992,6 +3135,7 @@
     const backdrop = document.createElement('div');
     backdrop.className = 'fpi-modal-backdrop';
     const archivedBanner = opts.archived ? `<div style="background:#f3f1fa; border:1px solid #8b7fc9; color:#6b5fa8; border-radius:6px; padding:8px 12px; font-size:11.5px; margin-bottom:10px;">${escapeHtml(opts.bannerText || 'Showing this checkpoint as it was before a later correction.')}</div>` : '';
+    const backfilledBanner = (!opts.archived && d.backfilled) ? `<div style="background:#f3f1fa; border:1px solid #8b7fc9; color:#6b5fa8; border-radius:6px; padding:8px 12px; font-size:11.5px; margin-bottom:10px;">Entered from a paper form after the fact — not logged in real time.</div>` : '';
     const headerGrid = `
       <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:8px 16px; background:#fbfaf7; border:1px solid var(--line); border-radius:8px; padding:12px 14px; margin-bottom:14px; font-size:12.5px;">
         <div><b style="display:block;font-size:10px;text-transform:uppercase;color:#8a8d87;letter-spacing:.05em;">Material</b>${escapeHtml(runHeader.material)||'—'}</div>
@@ -3047,6 +3191,7 @@
       <h3>${escapeHtml(runHeader.mixedMode ? runHeader.mouldRef : runHeader.itemCode)} ${d.editHistory && d.editHistory.length ? '<span style="font-size:10.5px; color:var(--amber); font-weight:700; vertical-align:middle;">EDITED</span>' : ''}</h3>
       <div style="font-size:12px;color:#7a7d78;margin-bottom:10px;">Run ID ${escapeHtml(d.runId)} · Checked ${new Date(row.checked_at).toLocaleString()}</div>
       ${archivedBanner}
+      ${backfilledBanner}
       ${headerGrid}
       ${sharedSection}
       ${blockSections}
@@ -3342,6 +3487,211 @@
     }
   }
 
+  // ==========================================================================
+  // Manual backfill — for a checkpoint that was recorded on paper but never entered digitally
+  // (e.g. during the End Run outage). Deliberately a separate, self-contained flow rather than
+  // reusing ipiChecklistBlocks/ipiSharedWrap/ipiSelectedRun*: those are tied to whichever run is
+  // live in the In-Process tab, and this needs to work against an arbitrary run — active or
+  // already ended — without disturbing that state. No FPI-reference drift-flagging here; this
+  // is a plain transcription of what's on the paper form.
+  // ==========================================================================
+  function ipiBuildBackfillSharedBlock(){
+    const wrap = document.createElement('div');
+    wrap.className = 'fpi-block';
+    wrap.innerHTML = `
+      <div class="fpi-tablewrap">
+        <table class="fpi-grid">
+          <thead><tr>
+            <th class="fpi-sticky-h">Item / Instrument</th>
+            <th>Sample 1</th><th>Sample 2</th><th>Sample 3</th><th>Sample 4</th><th>Sample 5</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>`;
+    const tbody = wrap.querySelector('tbody');
+    let hotRunnerCb = null;
+    SHARED_ITEMS.forEach(item=>{
+      const tr = document.createElement('tr');
+      const nameCell = document.createElement('td');
+      nameCell.className = 'fpi-namecell';
+      nameCell.innerHTML = `<span class="fpi-no">${item.no}</span><span class="fpi-itemname">${item.name}${item.unit?' ('+item.unit+')':''}</span><div class="fpi-iteminstr">${item.instrument}</div>`;
+      if(item.no === 1){
+        const hrLabel = document.createElement('label');
+        hrLabel.style.cssText = 'display:flex; align-items:center; gap:5px; font-size:11px; font-weight:600; color:var(--navy); margin-top:5px; cursor:pointer;';
+        hrLabel.innerHTML = `<input type="checkbox"/> Hot Runner (= 0)`;
+        hotRunnerCb = hrLabel.querySelector('input');
+        nameCell.appendChild(hrLabel);
+      }
+      tr.appendChild(nameCell);
+      SAMPLES.forEach(s=>{
+        const td = document.createElement('td');
+        td.className = 'fpi-samplecell';
+        td.innerHTML = `<input class="fpi-measure-input" type="number" step="0.001" data-item="${item.no}" data-sample="${s}" data-role="value" placeholder="value"/>`;
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    wrap.querySelectorAll('.fpi-measure-input').forEach(inp=> enforceMaxDecimals_(inp, 3));
+    hotRunnerCb.addEventListener('change', ()=>{
+      const on = hotRunnerCb.checked;
+      SAMPLES.forEach(s=>{
+        const inp = wrap.querySelector(`.fpi-measure-input[data-item="1"][data-sample="${s}"]`);
+        inp.disabled = on;
+        if(on) inp.value = '0';
+      });
+    });
+    return { wrap, hotRunnerCb };
+  }
+
+  function ipiOpenBackfillModal(targetRun, targetRunData, refreshLog){
+    if(!targetRun || !targetRunData){ toast('Select a run first.'); return; }
+    const backdrop = document.createElement('div');
+    backdrop.className = 'fpi-modal-backdrop';
+    backdrop.innerHTML = `<div class="fpi-modal" style="max-width:760px; max-height:88vh; overflow-y:auto;">
+      <h3>Log a past checkpoint from paper form</h3>
+      <div style="font-size:12px; color:#7a7d78; margin-bottom:14px;">Only use this to enter a checkpoint that was recorded on paper but never entered into the app. It's marked "PAPER FORM" in the run log so it stays distinguishable from real-time entries.</div>
+      <div class="fpi-field" style="max-width:280px; margin-bottom:16px;">
+        <label>Date &amp; time on the paper form (required)</label>
+        <input type="datetime-local" id="ipi-backfill-datetime" style="width:100%; padding:8px 10px; border:1px solid var(--line-strong); border-radius:6px; font-size:13px;"/>
+      </div>
+      <div class="fpi-section-label">Shared shot measurements</div>
+      <div id="ipi-backfill-shared"></div>
+      <div class="fpi-section-label" style="margin-top:14px;">Defect Check List</div>
+      <div id="ipi-backfill-checklist"></div>
+      <div class="fpi-section-label" style="margin-top:14px;">Remarks</div>
+      <div class="fpi-remarks"><textarea id="ipi-backfill-remarks" placeholder="Any additional notes..."></textarea></div>
+      <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:16px;">
+        <button type="button" class="fpi-btn ghost" id="ipi-backfill-cancel">Cancel</button>
+        <button type="button" class="fpi-btn primary" id="ipi-backfill-review">Review &amp; Log</button>
+      </div>
+    </div>`;
+    document.body.appendChild(backdrop);
+    backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) backdrop.remove(); });
+    backdrop.querySelector('#ipi-backfill-cancel').addEventListener('click', ()=>backdrop.remove());
+
+    const { wrap: sharedWrap, hotRunnerCb } = ipiBuildBackfillSharedBlock();
+    backdrop.querySelector('#ipi-backfill-shared').appendChild(sharedWrap);
+
+    const checklistContainer = backdrop.querySelector('#ipi-backfill-checklist');
+    const blocksState = [];
+    (targetRunData.blocks||[]).forEach((b, idx)=>{
+      const sub = b.cavityQty ? `${b.cavityQty} cavit${b.cavityQty>1?'ies':'y'} — checkpoint` : 'Checkpoint';
+      const wrap = buildBlockTable('ipi-backfill-'+idx, b.itemCode, sub);
+      checklistContainer.appendChild(wrap);
+      const originalCavity = targetRunData.mixedMode ? b.cavityQty : targetRunData.nosCavity;
+      const cavRow = document.createElement('div');
+      cavRow.style.cssText = 'display:flex; align-items:center; gap:8px; padding:8px 14px; background:#fbfaf7; border:1px solid var(--line); border-top:none; font-size:12px;';
+      cavRow.innerHTML = `<label style="color:#6b6f6a;">Cavities running then:</label><input type="number" step="1" class="ipi-cav-input" style="width:70px; padding:5px 7px; border:1px solid var(--line-strong); border-radius:5px; font-size:13px;" value="${escapeHtml(originalCavity||'')}"/><span style="color:#9a9d96;">(FPI: ${escapeHtml(originalCavity||'—')})</span>`;
+      wrap.insertBefore(cavRow, wrap.querySelector('.fpi-tablewrap'));
+      const cavInput = cavRow.querySelector('.ipi-cav-input');
+      enforceIntegerOnly_(cavInput);
+      blocksState.push({itemCode:b.itemCode, wrap, cavInput, originalCavity});
+    });
+
+    function collect(){
+      const blocksData = blocksState.map(b=>{
+        const results = ITEMS.map(item=>{
+          const row = {no:item.no, name:item.name, instrument:item.instrument, type:item.type, samples:{}};
+          SAMPLES.forEach(s=>{
+            if(item.type==='measure'){
+              const v = b.wrap.querySelector(`.fpi-measure-input[data-item="${item.no}"][data-sample="${s}"]`).value;
+              row.samples[s] = {value:v};
+            } else {
+              const btn = b.wrap.querySelector(`.fpi-toggle[data-item="${item.no}"][data-sample="${s}"]`);
+              row.samples[s] = {result:btn.dataset.state};
+            }
+          });
+          return row;
+        });
+        return { itemCode: b.itemCode, overallResult: b.wrap.querySelector('.fpi-block-badge').textContent, results, cavitiesRunning: b.cavInput.value.trim(), originalCavity: b.originalCavity };
+      });
+      const badgeTexts = blocksData.map(b=>b.overallResult);
+      let overallResult;
+      if(badgeTexts.some(t=>t.indexOf('NG')>=0)) overallResult = 'NG — DEFECT FOUND';
+      else if(badgeTexts.length && badgeTexts.every(t=>t.indexOf('OK')>=0)) overallResult = 'OK — PASS';
+      else overallResult = 'INCOMPLETE';
+      const sharedItems = {};
+      SHARED_ITEMS.forEach(item=>{
+        const samples = {};
+        SAMPLES.forEach(s=>{
+          const v = sharedWrap.querySelector(`.fpi-measure-input[data-item="${item.no}"][data-sample="${s}"]`).value;
+          samples[s] = {value:v};
+        });
+        sharedItems[item.no] = {name:item.name, samples};
+      });
+      return { blocksData, overallResult, sharedItems, hotRunner: hotRunnerCb.checked, remarks: backdrop.querySelector('#ipi-backfill-remarks').value.trim() };
+    }
+
+    backdrop.querySelector('#ipi-backfill-review').addEventListener('click', ()=>{
+      const dtVal = backdrop.querySelector('#ipi-backfill-datetime').value;
+      if(!dtVal){ toast('Enter the date & time from the paper form.'); return; }
+      const chosenDate = new Date(dtVal);
+      if(isNaN(chosenDate.getTime())){ toast('Invalid date.'); return; }
+      const anyStarted = blocksState.some(b=> b.wrap.querySelector('.fpi-block-badge').textContent !== 'NOT STARTED');
+      if(!anyStarted){ toast('Record at least one check result before saving.'); return; }
+      const checkpoint = collect();
+      backdrop.remove();
+      ipiShowBackfillReview(targetRun, checkpoint, chosenDate, refreshLog);
+    });
+  }
+
+  function ipiShowBackfillReview(targetRun, checkpoint, chosenDate, refreshLog){
+    const backdrop = document.createElement('div');
+    backdrop.className = 'fpi-modal-backdrop';
+    const blocksReview = checkpoint.blocksData.map(blk=>{
+      const resColor = blk.overallResult.indexOf('NG')>=0 ? 'var(--ng)' : (blk.overallResult.indexOf('OK')>=0 ? 'var(--ok)' : 'var(--amber)');
+      return `<div style="padding:6px 10px; border-bottom:1px solid #f0efe9; font-size:12.5px; display:flex; justify-content:space-between;">
+        <span><b>${escapeHtml(blk.itemCode)}</b></span>
+        <span style="color:${resColor}; font-weight:700;">${escapeHtml(blk.overallResult)}</span>
+      </div>`;
+    }).join('');
+    backdrop.innerHTML = `<div class="fpi-modal" style="max-width:500px;">
+      <h3>Review before logging</h3>
+      <div style="font-size:12.5px; color:#7a7d78; margin-bottom:12px;">This will be saved as a backfilled entry dated <b>${escapeHtml(chosenDate.toLocaleString())}</b> for Machine ${escapeHtml(targetRun.machine)}.</div>
+      <div style="border:1px solid var(--line); border-radius:6px; margin-bottom:14px;">${blocksReview}</div>
+      <div style="display:flex; gap:10px; justify-content:flex-end;">
+        <button type="button" class="fpi-btn ghost" id="ipi-backfill-review-back">Go back</button>
+        <button type="button" class="fpi-btn primary" id="ipi-backfill-review-confirm">Confirm &amp; Log</button>
+      </div>
+    </div>`;
+    document.body.appendChild(backdrop);
+    backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) backdrop.remove(); });
+    backdrop.querySelector('#ipi-backfill-review-back').addEventListener('click', ()=>backdrop.remove());
+    backdrop.querySelector('#ipi-backfill-review-confirm').addEventListener('click', ()=>{
+      backdrop.remove();
+      showNamePrompt('Log past checkpoint', "Enter the inspector's own personal PIN to confirm this paper-form entry.", async (name)=>{
+        await ipiSaveBackfillCheckpoint(targetRun, name, checkpoint, chosenDate, refreshLog);
+      }, 'Confirming…');
+    });
+  }
+
+  async function ipiSaveBackfillCheckpoint(targetRun, inspectorName, checkpoint, chosenDate, refreshLog){
+    const id = 'ipi:' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
+    const checkedAt = chosenDate.toISOString();
+    const data = {
+      id, runId: targetRun.run_id, fpiRecordId: targetRun.id,
+      checkedAt, inspector: inspectorName,
+      overallResult: checkpoint.overallResult, remarks: checkpoint.remarks,
+      sharedItems: checkpoint.sharedItems, hotRunner: checkpoint.hotRunner,
+      blocks: checkpoint.blocksData, editHistory: [], backfilled: true
+    };
+    try{
+      await sbFetch_('ipi_records', { method:'POST', headers:{'Prefer':'return=minimal'}, body: JSON.stringify({
+        id, run_id: targetRun.run_id, fpi_record_id: targetRun.id, checked_at: checkedAt,
+        inspector: inspectorName, overall_result: checkpoint.overallResult, data
+      })});
+      toast('Past checkpoint logged.');
+      if(refreshLog) await refreshLog();
+    }catch(e){
+      console.error(e);
+      toast('Could not save this checkpoint — check connection and try again.');
+    }
+  }
+
+  document.getElementById('ipi_backfill_btn').addEventListener('click', ()=>{
+    ipiOpenBackfillModal(ipiSelectedRun, ipiSelectedRunData, ipiLoadLog);
+  });
+
   // Curated extract — one CSV row per product checked per checkpoint, weights/times averaged.
   // Same shape as FPI's own Part Info export.
   function ipiToPartInfoCsv(rows){
@@ -3426,6 +3776,9 @@
   let ipihSelectedRun = null;
   let ipihSelectedRunData = null;
   let ipihLogRowsCache = [];
+  // Run ids that are still their machine's most recent FPI record — i.e. no fresh FPI has
+  // superseded them yet, so "Reopen run" is safe to offer (the machine hasn't moved on).
+  let ipihNotOccupiedRunIds = new Set();
 
   async function ipihLoadRuns(){
     const sel = document.getElementById('ipih_run_select');
@@ -3433,6 +3786,11 @@
     try{
       const { runRows, endedRunIds } = await ipiFetchRunsAndEndedSet_();
       ipihRunsCache = runRows.filter(r=> endedRunIds.has(r.run_id));
+      const latestByMachine = {};
+      runRows.forEach(r=>{
+        if(!(r.machine in latestByMachine)) latestByMachine[r.machine] = r; // rows already sorted newest-first
+      });
+      ipihNotOccupiedRunIds = new Set(Object.values(latestByMachine).map(r=>r.id));
       sel.innerHTML = '<option value="">Select an ended run…</option>' + ipihRunsCache.map(r=>{
         const label = 'M' + r.machine + ' — ' + (r.mixed_mode ? r.mould_ref : r.item_code) + ' · ' + formatLocalDate_(r.submitted_at);
         return `<option value="${escapeHtml(r.id)}">${escapeHtml(label)}</option>`;
@@ -3481,8 +3839,9 @@
             .map(b=> `${escapeHtml(b.itemCode)} ${escapeHtml(b.cavitiesRunning)}/${escapeHtml(b.originalCavity)}`);
           const cavityFlag = cavFlags.length ? ` <span style="color:var(--amber); font-weight:700;">⚠ ${cavFlags.join(', ')} cav</span>` : '';
           const editedTag = r.data && r.data.editHistory && r.data.editHistory.length ? ' <span style="font-size:9.5px;color:var(--amber);font-weight:700;">EDITED</span>' : '';
+          const backfilledTag = r.data && r.data.backfilled ? ' <span style="font-size:9.5px;color:#6b5fa8;font-weight:700;">PAPER FORM</span>' : '';
           return `<div data-rowid="${escapeHtml(r.id)}" style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font-size:12.5px; margin-bottom:6px; cursor:pointer;">
-            <span>${escapeHtml(time)} · ${escapeHtml(r.inspector||'—')}${product}${cavityFlag}${editedTag}</span>
+            <span>${escapeHtml(time)} · ${escapeHtml(r.inspector||'—')}${product}${cavityFlag}${editedTag}${backfilledTag}</span>
             <span style="font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px; background:${bg}; color:${col};">${escapeHtml(r.overall_result||'—')}</span>
           </div>`;
         }).join('');
@@ -3507,12 +3866,18 @@
     ipihSelectedRun = ipihRunsCache.find(r=>r.id===id) || null;
     updateTopbarForTab('ipihistory');
     const headerEl = document.getElementById('ipih_run_header');
+    const reopenBtn = document.getElementById('ipih_reopen_btn');
+    const backfillBtn = document.getElementById('ipih_backfill_btn');
     if(!ipihSelectedRun){
       ipihSelectedRunData = null;
       headerEl.style.display = 'none';
+      reopenBtn.style.display = 'none';
+      backfillBtn.style.display = 'none';
       document.getElementById('ipih_log').innerHTML = '';
       return;
     }
+    reopenBtn.style.display = ipihNotOccupiedRunIds.has(ipihSelectedRun.id) ? '' : 'none';
+    backfillBtn.style.display = '';
     try{
       const rows = await sbFetch_(`fpi_records?id=eq.${encodeURIComponent(ipihSelectedRun.id)}&select=data`);
       ipihSelectedRunData = rows && rows[0] ? rows[0].data : null;
@@ -3520,6 +3885,41 @@
     if(!ipihSelectedRunData) return;
     ipihRenderHeader();
     await ipihLoadLog();
+  });
+
+  // "Ended" is really just the absence of an active-status row (see ipiFetchRunsAndEndedSet_) —
+  // but writing that absence back via DELETE is unreliable: app_settings has no DELETE RLS
+  // policy, so a DELETE call returns success while silently touching zero rows (same failure
+  // class the End Run button itself had). Setting the value to 'active' instead goes through
+  // the same POST+merge-duplicates path End Run already uses successfully, and is verified via
+  // return=representation so a silent failure surfaces as an honest error instead of a false toast.
+  document.getElementById('ipih_reopen_btn').addEventListener('click', ()=>{
+    if(!ipihSelectedRun) return;
+    showConfirmDialog(
+      'Reopen this run?',
+      'This makes Machine ' + ipihSelectedRun.machine + ' show this run as active again in In-Process. Only do this if the machine hasn’t already started a new job.',
+      'Reopen run',
+      async ()=>{
+        try{
+          const rows = await sbFetch_('app_settings', {
+            method:'POST',
+            headers:{'Prefer':'resolution=merge-duplicates,return=representation'},
+            body: JSON.stringify({ key:'ipi_run_status:'+ipihSelectedRun.run_id, value:'active' })
+          });
+          if(!rows || !rows.length) throw new Error('Reopen did not apply.');
+        }catch(err){ console.error(err); toast('Could not reopen this run — please try again.'); return; }
+        toast('Run reopened — it now appears as active in In-Process.');
+        const sel = document.getElementById('ipih_run_select');
+        sel.value = '';
+        sel.dispatchEvent(new Event('change', {bubbles:true}));
+        await ipihLoadRuns();
+        await ipiLoadRuns();
+      }
+    );
+  });
+
+  document.getElementById('ipih_backfill_btn').addEventListener('click', ()=>{
+    ipiOpenBackfillModal(ipihSelectedRun, ipihSelectedRunData, ipihLoadLog);
   });
 
   document.getElementById('ipih_export_full_btn').addEventListener('click', async ()=>{
