@@ -539,9 +539,15 @@
       return true;
     }catch(e){ console.error('backendSet failed', key, e); return false; }
   }
-  async function backendDelete(key){
+  async function backendDelete(key, pin){
     try{
-      const table = key.startsWith('fpi:') ? 'fpi_records' : key.startsWith('audit:') ? 'audit_log' : key.startsWith('lists:') ? 'dropdown_lists' : 'app_settings';
+      if(key.startsWith('fpi:')){
+        // Deleting an FPI record is gated server-side too — the RPC re-verifies the PIN
+        // itself, so a raw REST call can never delete a record without one.
+        await sbRpc_('delete_fpi_record_verified', { p_id: key, p_pin: pin });
+        return true;
+      }
+      const table = key.startsWith('audit:') ? 'audit_log' : key.startsWith('lists:') ? 'dropdown_lists' : 'app_settings';
       const col = table==='dropdown_lists' ? 'list_key' : table==='app_settings' ? 'key' : 'id';
       await sbFetch_(`${table}?${col}=eq.${encodeURIComponent(key)}`, { method:'DELETE' });
       return true;
@@ -2285,11 +2291,12 @@
     confirmBtn.addEventListener('click', async ()=>{
       const reason = reasonInput.value.trim();
       if(!reason){ toast('A reason is required.'); return; }
-      const matchedName = await verifyUserPin(userPinInput.value.trim());
+      const pin = userPinInput.value.trim();
+      const matchedName = await verifyUserPin(pin);
       if(!matchedName){ toast('Invalid personal PIN — ask your supervisor to add you under Manage Lists > User PINs.'); return; }
       confirmBtn.disabled = true; confirmBtn.textContent = 'Deleting…';
       try{
-        await onConfirm({name: matchedName, reason});
+        await onConfirm({name: matchedName, reason, pin});
       } finally {
         confirmBtn.disabled = false; confirmBtn.textContent = originalText;
       }
@@ -2375,35 +2382,35 @@
 
   document.getElementById('fpi-clear-all').addEventListener('click', ()=>{
     if(!cachedRecords.length){ toast('No records to clear.'); return; }
-    showPinGate('Clear ALL records?', `This permanently deletes all ${cachedRecords.length} saved inspection records for everyone using this form. Each one is logged to the Deletion Log with a full snapshot before removal. This cannot be undone.`, async ({name, reason})=>{
+    showPinGate('Clear ALL records?', `This permanently deletes all ${cachedRecords.length} saved inspection records for everyone using this form. Each one is logged to the Deletion Log with a full snapshot before removal. This cannot be undone.`, async ({name, reason, pin})=>{
       try{
         const items = await backendGetMany('fpi:');
         const keys = Object.keys(items);
         const batchId = 'batch:' + Date.now();
-        let count = 0;
+        let count = 0, failed = 0;
         for(const k of keys){
           try{
             if(items[k]){
               const snapshot = JSON.parse(items[k]);
               await logDeletion(snapshot, name, reason, batchId);
             }
-            await window.storage.delete(k, true);
-            count++;
-          }catch(e){ console.error('Failed to delete/log', k, e); }
+            const ok = await window.storage.delete(k, pin);
+            if(ok) count++; else failed++;
+          }catch(e){ console.error('Failed to delete/log', k, e); failed++; }
         }
-        toast(`Deleted ${count} record(s) — all logged in Deletion Log.`);
+        toast(failed ? `Deleted ${count} record(s), ${failed} failed — check your PIN.` : `Deleted ${count} record(s) — all logged in Deletion Log.`);
         loadRecords();
       }catch(e){ toast('Could not clear records.'); }
     });
   });
 
   function deleteOneRecord(record){
-    showPinGate('Delete this record?', `Permanently deletes the record for ${record.mixedMode ? record.mouldRef : record.itemCode} (Run ID ${record.runId}). A full snapshot is saved to the Deletion Log first. This cannot be undone.`, async ({name, reason})=>{
+    showPinGate('Delete this record?', `Permanently deletes the record for ${record.mixedMode ? record.mouldRef : record.itemCode} (Run ID ${record.runId}). A full snapshot is saved to the Deletion Log first. This cannot be undone.`, async ({name, reason, pin})=>{
       try{
         await logDeletion(record, name, reason, null);
-        await window.storage.delete(record.id, true);
-        toast('Record deleted — snapshot saved to Deletion Log.');
-        loadRecords();
+        const ok = await window.storage.delete(record.id, pin);
+        if(ok){ toast('Record deleted — snapshot saved to Deletion Log.'); loadRecords(); }
+        else{ toast('Could not delete record — PIN verification failed.'); }
       }catch(e){ toast('Could not delete record.'); }
     });
   }
