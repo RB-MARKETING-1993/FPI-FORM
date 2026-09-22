@@ -1,0 +1,1334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Daily Production Report</title>
+<style>
+  html, body{ margin:0; padding:0; }
+  body{ background:#f6f5f1; }
+  :root{
+    --ink:#1c2622; --paper:#f6f5f1; --panel:#ffffff; --line:#d8d5cb; --line-strong:#a9a498;
+    --navy:#1f2e35; --navy-2:#2c4049; --ok:#2f7a4f; --ok-bg:#e4f3e9; --ng:#b6402f; --ng-bg:#fbe9e6;
+    --amber:#b3821b; --amber-bg:#f7ecd2;
+    --violet:#6b4fa0; --violet-bg:#ece6f5;
+    --mono: "SF Mono","IBM Plex Mono",Menlo,Consolas,monospace;
+    --sans: -apple-system,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  #pr-root{ font-family:var(--sans); color:var(--ink); background:var(--paper); max-width:1180px; margin:0 auto; padding:0 0 60px; }
+  #pr-root .stamp{ font-family:var(--mono); letter-spacing:.04em; }
+  .pr-topbar{ background:var(--navy); color:#eef1ef; padding:18px 22px 16px; border-radius:10px 10px 0 0; }
+  .pr-topbar .co{ font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#a9c2c1; }
+  .pr-topbar h1{ margin:2px 0 10px; font-size:21px; font-weight:700; }
+  .pr-docstrip{ display:flex; gap:18px; flex-wrap:wrap; font-family:var(--mono); font-size:11px; color:#b9c7c6; border-top:1px solid #3a4d54; padding-top:9px; }
+  .pr-docstrip b{ color:#dfe8e6; font-weight:600; }
+  .pr-tabs{ display:flex; gap:2px; background:var(--navy-2); padding:0 22px; }
+  .pr-tab{ padding:13px 16px; font-size:13px; font-weight:600; color:#c7d3d2; cursor:pointer; border-bottom:3px solid transparent; user-select:none; touch-action:manipulation; }
+  .pr-tab.active{ color:#fff; border-bottom-color:#7fb8a8; }
+  .pr-panel{ background:var(--panel); border:1px solid var(--line); border-top:none; border-radius:0 0 10px 10px; padding:20px 22px 26px; display:none; }
+  .pr-panel.active{ display:block; }
+  .pr-fieldgrid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:12px; margin-bottom:18px; }
+  .pr-field label{ display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:#6b6f6a; margin-bottom:4px; }
+  .pr-field input, .pr-field select, .pr-field textarea{ width:100%; padding:11px 10px; font-size:16px; border:1px solid var(--line-strong); border-radius:6px; background:#fff; font-family:var(--sans); }
+  .pr-field input:focus, .pr-field select:focus, .pr-field textarea:focus{ outline:2px solid #7fb8a8; outline-offset:1px; }
+  .pr-section-label{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--navy); margin:22px 0 10px; display:flex; align-items:center; gap:10px; }
+  .pr-section-label::after{ content:""; flex:1; height:1px; background:var(--line); }
+  .pr-inset{ border:1px solid var(--line); border-radius:8px; padding:16px; background:#fbfaf7; margin-bottom:16px; }
+  .pr-jobheader{ border:1px solid var(--line); border-radius:8px; padding:14px 16px; background:#fbfaf7; margin-bottom:16px; }
+  .pr-jobheader h3{ margin:0 0 6px; font-size:16px; }
+  .pr-jobheader .meta{ font-size:12px; color:#6b6f6a; line-height:1.7; }
+  .pr-chip{ display:inline-block; background:#eef3f1; border:1px solid var(--line); border-radius:12px; padding:3px 10px; font-size:11px; margin:2px 4px 2px 0; }
+  .pr-tablewrap{ overflow-x:auto; -webkit-overflow-scrolling:touch; border:1px solid var(--line); border-radius:8px; margin-bottom:14px; }
+  table.pr-grid{ border-collapse:collapse; width:100%; min-width:640px; font-size:12.5px; }
+  table.pr-grid thead th{ background:#eef0ec; font-size:10.5px; text-transform:uppercase; color:#565a55; font-weight:700; padding:7px 8px; border-bottom:1px solid var(--line); text-align:left; }
+  table.pr-grid td{ border-bottom:1px solid #ece9e1; padding:7px 8px; vertical-align:top; }
+  table.pr-grid tr:nth-child(even) td{ background:#fbfaf7; }
+  table.pr-grid tr.total-row td{ font-weight:700; background:#eef3f1 !important; border-top:2px solid var(--line-strong); }
+  .pr-rejectdetail{ font-size:11px; color:var(--ng); margin-top:3px; }
+  .pr-itembreakdown{ font-size:11px; color:#6b6f6a; margin-top:3px; }
+  tr.pr-stoprow td{ background:var(--amber-bg) !important; color:var(--amber); font-weight:600; font-size:12.5px; }
+  tr.pr-cavrow td{ background:var(--violet-bg) !important; color:var(--violet); font-weight:600; font-size:12.5px; }
+  .pr-btn{ padding:12px 22px; border-radius:7px; border:none; font-weight:700; font-size:13.5px; cursor:pointer; touch-action:manipulation; min-height:44px; }
+  .pr-btn.primary{ background:var(--navy); color:#fff; }
+  .pr-btn.primary:hover{ background:var(--navy-2); }
+  .pr-btn.ghost{ background:transparent; color:var(--navy); border:1px solid var(--line-strong); }
+  .pr-btn.danger{ background:transparent; color:var(--ng); border:1px solid var(--ng); }
+  .pr-btn.danger:hover{ background:var(--ng-bg); }
+  .pr-btn.small{ padding:7px 12px; font-size:12px; min-height:34px; }
+  .pr-rejectrow{ display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
+  .pr-rejectrow select, .pr-rejectrow input{ padding:9px 8px; font-size:14px; border:1px solid var(--line-strong); border-radius:6px; }
+  .pr-rejectrow .rr-item{ flex:2; min-width:140px; }
+  .pr-rejectrow .rr-qty{ flex:1; min-width:70px; }
+  .pr-rejectrow .rr-uom{ flex:1; min-width:70px; }
+  .pr-rejectrow .rr-defect{ flex:2; min-width:150px; }
+  .pr-rejectrow button{ background:var(--ng-bg); color:var(--ng); border:none; border-radius:50%; width:26px; height:26px; cursor:pointer; font-size:13px; flex-shrink:0; }
+  .pr-badge{ font-family:var(--mono); font-weight:700; font-size:12px; padding:5px 12px; border-radius:20px; display:inline-block; }
+  .pr-badge.ok{ background:var(--ok-bg); color:var(--ok); }
+  .pr-badge.ng{ background:var(--ng-bg); color:var(--ng); }
+  .pr-badge.amber{ background:var(--amber-bg); color:var(--amber); }
+  .pr-badge.violet{ background:var(--violet-bg); color:var(--violet); }
+  .pr-toast{ position:fixed; bottom:22px; left:50%; transform:translateX(-50%); background:var(--navy); color:#fff; padding:11px 20px; border-radius:8px; font-size:13px; box-shadow:0 6px 20px rgba(0,0,0,.2); z-index:50; opacity:0; pointer-events:none; transition:opacity .25s, transform .25s; max-width:80%; text-align:center; }
+  .pr-toast.show{ opacity:1; transform:translateX(-50%) translateY(-6px); }
+  .pr-empty{ text-align:center; padding:34px 10px; color:#8a8d87; font-size:13px; }
+  .pr-notebox{ border:1px solid var(--amber); background:var(--amber-bg); border-radius:8px; padding:14px 16px; margin:16px 0; }
+  .pr-notebox label{ display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--amber); margin-bottom:6px; font-weight:700; }
+  .pr-notebox textarea{ width:100%; min-height:56px; padding:9px; border:1px solid var(--line-strong); border-radius:6px; font-family:var(--sans); font-size:14px; margin-bottom:8px; }
+  .pr-notedisplay{ font-size:11.5px; color:#6b6f6a; margin-top:8px; white-space:pre-wrap; }
+  .pr-segcard{ border:1px solid var(--line); border-radius:8px; margin-bottom:12px; overflow:hidden; }
+  .pr-segcard-head{ padding:12px 16px; background:#fbfaf7; cursor:pointer; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
+  .pr-segcard-body{ padding:0 16px 16px; display:none; }
+  .pr-segcard-body.open{ display:block; }
+  .pr-recbar{ display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px; }
+  .pr-daydivider{ font-size:13px; font-weight:700; color:var(--navy); margin:20px 0 8px; padding-bottom:6px; border-bottom:2px solid var(--line-strong); }
+  .pr-daydivider:first-child{ margin-top:0; }
+</style>
+</head>
+<body>
+<div id="pr-root">
+  <div class="pr-topbar">
+    <div class="co">RB Diversified Sdn Bhd</div>
+    <h1>Daily Production Report</h1>
+    <div class="pr-docstrip">
+      <span><b>Doc No:</b> RB-P03-05 (Rev00)</span>
+      <span><b>Eff Date:</b> 1 Jul 2023</span>
+      <span><b>Basis:</b> Hourly meter reading per operator, linked to the active FPI run</span>
+    </div>
+  </div>
+  <div class="pr-tabs">
+    <div class="pr-tab active" data-tab="new">New Entry</div>
+    <div class="pr-tab" data-tab="records">Records</div>
+    <div class="pr-tab" data-tab="dashboard">Operator Dashboard</div>
+    <div class="pr-tab" data-tab="summary">Daily Summary</div>
+  </div>
+
+  <div class="pr-panel active" id="panel-new">
+    <div class="pr-fieldgrid" style="max-width:320px;">
+      <div class="pr-field">
+        <label>Machine</label>
+        <select id="pr_machine">
+          <option value="">Select machine…</option>
+          <option value="1">Machine 1</option>
+          <option value="2">Machine 2</option>
+          <option value="3">Machine 3</option>
+          <option value="4">Machine 4</option>
+          <option value="5">Machine 5</option>
+          <option value="6">Machine 6</option>
+        </select>
+      </div>
+    </div>
+    <div id="pr-machine-body"></div>
+    <datalist id="pr-operator-names"></datalist>
+  </div>
+
+  <div class="pr-panel" id="panel-records">
+    <div class="pr-fieldgrid">
+      <div class="pr-field"><label>Machine</label><select id="pr_rec_machine"><option value="">All machines</option><option value="1">Machine 1</option><option value="2">Machine 2</option><option value="3">Machine 3</option><option value="4">Machine 4</option><option value="5">Machine 5</option><option value="6">Machine 6</option></select></div>
+      <div class="pr-field"><label>From</label><input type="date" id="pr_rec_from"/></div>
+      <div class="pr-field"><label>To</label><input type="date" id="pr_rec_to"/></div>
+      <div class="pr-field"><label>Group By</label><select id="pr_rec_groupby"><option value="day">Day</option><option value="machine">Machine</option><option value="operator">Operator</option></select></div>
+      <div class="pr-field" style="align-self:end;"><button class="pr-btn primary" id="pr-rec-load" style="width:100%;">Load</button></div>
+    </div>
+    <div class="pr-recbar">
+      <div class="pr-recnote" id="pr-rec-summary" style="font-size:11.5px;color:#7a7d78;"></div>
+      <button class="pr-btn ghost small" id="pr-rec-csv">Export CSV</button>
+    </div>
+    <div id="pr-records-list"><div class="pr-empty">Pick a date range and click Load.</div></div>
+  </div>
+
+  <div class="pr-panel" id="panel-dashboard">
+    <div class="pr-fieldgrid">
+      <div class="pr-field"><label>From</label><input type="date" id="pr_dash_from"/></div>
+      <div class="pr-field"><label>To</label><input type="date" id="pr_dash_to"/></div>
+      <div class="pr-field" style="align-self:end;"><button class="pr-btn primary" id="pr-dash-load" style="width:100%;">Load</button></div>
+    </div>
+    <div id="pr-dash-table"><div class="pr-empty">Pick a date range and click Load.</div></div>
+  </div>
+
+  <div class="pr-panel" id="panel-summary">
+    <div class="pr-fieldgrid" style="max-width:420px;">
+      <div class="pr-field"><label>Date</label><input type="date" id="pr_sum_date"/></div>
+      <div class="pr-field" style="align-self:end;"><button class="pr-btn primary" id="pr-sum-load" style="width:100%;">Generate</button></div>
+    </div>
+    <div class="pr-empty" style="text-align:left;padding:0 0 14px;">Generates a WhatsApp-ready text summary for the day. Copy it and paste into your production WhatsApp group — WhatsApp doesn't allow apps to post into a group automatically, so this saves the typing but the send is still done by hand.</div>
+    <div id="pr-sum-output" style="display:none;">
+      <textarea id="pr-sum-text" readonly style="width:100%;min-height:340px;font-family:var(--mono);font-size:13px;padding:14px;border:1px solid var(--line-strong);border-radius:8px;white-space:pre;"></textarea>
+      <button class="pr-btn primary" id="pr-sum-copy" style="margin-top:10px;">Copy to Clipboard</button>
+    </div>
+    <div id="pr-sum-empty" class="pr-empty">Pick a date and click Generate.</div>
+  </div>
+</div>
+<div class="pr-toast" id="pr-toast"></div>
+
+<script>
+  const SUPABASE_URL = 'https://qhrnaasnebudpixcjnfi.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_EP0wgrWR7aQWP2Mr05MkLQ_LXypw7Xt';
+
+  async function sbFetch_(path, opts){
+    const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, Object.assign({}, opts, {
+      headers: Object.assign({
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': (opts && opts.headers && opts.headers['Prefer']) || 'return=representation'
+      }, (opts && opts.headers) || {})
+    }));
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : null;
+    if(!res.ok) throw new Error((data && data.message) || ('Supabase error ' + res.status));
+    return data;
+  }
+  async function sbRpc_(fn, args){
+    return sbFetch_('rpc/' + fn, { method:'POST', body: JSON.stringify(args||{}) });
+  }
+  function escapeHtml(s){
+    return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  // Guards a button against double-submit (a real risk on a touch-screen shop-floor tablet —
+  // a double-tap can fire two POSTs before the first save's re-render replaces the button).
+  // Success re-renders the whole view anyway (a fresh, enabled button); failure re-enables this one.
+  async function withButtonGuard(btnId, fn){
+    const btn = document.getElementById(btnId);
+    if(!btn || btn.disabled) return;
+    btn.disabled = true;
+    try{ await fn(); }
+    finally{ btn.disabled = false; }
+  }
+  function toast(msg){
+    const t = document.getElementById('pr-toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'), 3200);
+  }
+  function fmtDT(iso){
+    if(!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  }
+  function fmtTime(d){
+    if(d==null) return '';
+    const dt = (d instanceof Date) ? d : new Date(d);
+    return dt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  }
+  function fmtDuration(mins){
+    if(mins==null) return '';
+    if(mins<1) return '<1m';
+    const h = Math.floor(mins/60), m = Math.round(mins%60);
+    return h ? `${h}h ${m}m` : `${m}m`;
+  }
+  // A stop's duration: entry_time is when it was logged (its start), resumed_at is when
+  // production resumed. Still-unresumed stops report elapsed time up to now (an "ongoing" figure).
+  function stopDurationMinutes(entry){
+    if(!entry || !entry.is_stop) return null;
+    const start = new Date(entry.entry_time).getTime();
+    const end = entry.resumed_at ? new Date(entry.resumed_at).getTime() : Date.now();
+    return Math.max(0, Math.round((end-start)/60000));
+  }
+  // Classifies a stop entry for display, given the entry chronologically right after it in the
+  // same segment (or null if it's the newest entry). Three states:
+  //  - 'known'      resumed_at was explicitly logged → exact duration
+  //  - 'ongoing'    no resumed_at AND nothing logged since → machine is still down right now
+  //  - 'unrecorded' no resumed_at BUT a later entry exists → production clearly resumed at some
+  //                 point (an hourly entry followed), we just never captured exactly when — this
+  //                 covers every stop logged before the Resume feature existed, so it must not
+  //                 be shown as "ongoing" (which would grow forever) or silently counted as 0.
+  function describeStop(entry, nextEntry){
+    if(entry.resumed_at){
+      const mins = stopDurationMinutes(entry);
+      return { state:'known', minutes: mins,
+        label: `Duration: ${fmtDuration(mins)} (resumed ${fmtDT(entry.resumed_at)}${entry.resumed_by?' by '+escapeHtml(entry.resumed_by):''})` };
+    }
+    if(nextEntry){
+      return { state:'unrecorded', minutes: null,
+        label: `Duration: not recorded (resumed sometime before ${fmtDT(nextEntry.entry_time)})` };
+    }
+    const mins = stopDurationMinutes(entry);
+    return { state:'ongoing', minutes: mins, label: `<b>Ongoing — ${fmtDuration(mins)} so far</b>` };
+  }
+  // Maps entry id → the entry right after it in the same segment (or null), from a list of
+  // segments whose embedded production_entries are already ordered oldest→newest.
+  function buildNextEntryMap(segments){
+    const m = new Map();
+    (segments||[]).forEach(seg=>{
+      const list = seg.production_entries || [];
+      list.forEach((e,i)=> m.set(e.id, list[i+1]||null));
+    });
+    return m;
+  }
+  async function listUserPinNames(){
+    try{ return (await sbRpc_('list_user_pin_names')) || []; }catch(e){ return []; }
+  }
+
+  const REJECT_DEFECTS = [
+    "Part Weight","Dimension","Fitment Test","Colour","Short Moulding","Flashing / Burr","Sink Mark",
+    "Bubble","Cracking / Blushing","Strain / Warping","Weld Line","Flow Mark / Jetting Mark","Silver Streak",
+    "Burn Mark / Black Dot","Peeling","Gating / Ejector Mark","Scratches / Dented","Day/Month Arrow",
+    "Material Arrow","Manufacturer Arrow","Dirty","Other"
+  ];
+  const STOP_REASONS = ["Machine Issue","Mould Issue","Waiting Instruction","Break Time"];
+  const CAVITY_CHANGE_REASONS = ["Cavity Blocked / Plugged","Core Damage","Cavity Reactivated / Repaired","Other"];
+
+  // ---- Cavity/output math (meter reading is a shot counter that resets to 0 every hour) ----
+  // A mould's cavity count is set at FPI time but can change mid-run (a cavity gets blocked, or
+  // a repaired one comes back online) — logged per item as a "Cavity Change" event on the
+  // segment. All output math resolves the cavity count EFFECTIVE AT A GIVEN TIME, not just the
+  // value the job started with, so hours logged before a change keep their original math.
+  function cavityMap(seg){
+    if(seg.mixed_mode && (seg.cavity_breakdown||[]).length) return seg.cavity_breakdown;
+    return [{itemCode: seg.item_code || seg.mould_ref || '(item)', cavityQty: seg.nos_cavity || 1}];
+  }
+  // changes: production_cavity_changes rows for this segment (any order). atTime: a Date/ISO
+  // string/ms — defaults to now when omitted (e.g. a not-yet-saved entry being composed live).
+  function effectiveCavityMap(seg, changes, atTime){
+    const base = cavityMap(seg);
+    if(!changes || !changes.length) return base;
+    const t = atTime ? new Date(atTime).getTime() : Date.now();
+    return base.map(m=>{
+      const applicable = changes
+        .filter(c => String(c.item_code||'')===String(m.itemCode||'') && new Date(c.changed_at).getTime()<=t)
+        .sort((a,b)=> new Date(b.changed_at)-new Date(a.changed_at));
+      return { itemCode: m.itemCode, cavityQty: applicable.length ? applicable[0].new_cavity : m.cavityQty };
+    });
+  }
+  function entryBreakdown(seg, entry, changes){
+    const map = effectiveCavityMap(seg, changes, entry.entry_time);
+    const shots = parseFloat(entry.meter_reading) || 0;
+    return map.map(m=>{
+      const pieces = shots * (parseFloat(m.cavityQty) || 1);
+      const rejPcs = (entry.production_rejects||[]).filter(r=>r.item_code===m.itemCode && r.uom==='pcs').reduce((s,r)=>s+(parseFloat(r.qty)||0),0);
+      return { itemCode: m.itemCode, cavityQty: m.cavityQty, pieces, rejPcs, good: pieces - rejPcs };
+    });
+  }
+  function entryTotals(seg, entry, changes){
+    if(entry.is_stop) return { good:0, rejectPcs:0, rejectKg:0, breakdown:[] };
+    const bd = entryBreakdown(seg, entry, changes);
+    const good = bd.reduce((a,b)=>a+b.good,0);
+    const rejectPcs = bd.reduce((a,b)=>a+b.rejPcs,0);
+    const rejectKg = (entry.production_rejects||[]).filter(r=>r.uom==='kg').reduce((s,r)=>s+(parseFloat(r.qty)||0),0);
+    return {good, rejectPcs, rejectKg, breakdown: bd};
+  }
+  function breakdownHtml(seg, entry, changes){
+    const t = entryTotals(seg, entry, changes);
+    if(!seg.mixed_mode || t.breakdown.length<2) return '';
+    return '<div class="pr-itembreakdown">' + t.breakdown.map(b=>`${escapeHtml(b.itemCode)}: ${b.good} good / ${b.rejPcs} reject`).join(' · ') + '</div>';
+  }
+  // Shared by every entries table (Active Job, Records × 3 views) — was hand-copied per view
+  // before, which is exactly how the earlier double-HTML-escaping bug slipped through unnoticed
+  // in one copy while the others were already fixed.
+  function rejectDetailText(entry){
+    return (entry.production_rejects||[]).map(r=>`${escapeHtml(r.item_code||'')} ${r.qty}${escapeHtml(r.uom)} (${escapeHtml(r.defect_type||'—')})`).join('; ');
+  }
+  // opts.leadingCells: extra <td> html to insert between the Time cell and the message cell
+  // (renderRecordsByOperator needs a "Machine/Item" column there). opts.colspan: how many of the
+  // remaining table columns the message cell should span.
+  function stopRowHtml(entry, nextEntry, opts){
+    opts = opts || {};
+    const durLabel = describeStop(entry, nextEntry).label;
+    const opLabel = opts.showOperator===false ? '' : ` (${escapeHtml(entry.entered_by||'')})`;
+    return `<tr class="pr-stoprow"><td>${fmtDT(entry.entry_time)}</td>${opts.leadingCells||''}<td colspan="${opts.colspan||5}">⏸ MACHINE STOP — ${escapeHtml(entry.stop_reason||'Other')}${entry.remarks?' · '+escapeHtml(entry.remarks):''}${opLabel} · ${durLabel}</td></tr>`;
+  }
+
+  // ---- Tabs ----
+  document.querySelectorAll('.pr-tab').forEach(tab=>{
+    tab.addEventListener('click', ()=>{
+      document.querySelectorAll('.pr-tab').forEach(t=>t.classList.remove('active'));
+      document.querySelectorAll('.pr-panel').forEach(p=>p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+    });
+  });
+
+  // ---- Active FPI runs (same resolution logic as machine-parameter.html) ----
+  let runsCache = [];
+  async function loadRuns(){
+    try{
+      const [runRows, statusRows] = await Promise.all([
+        sbFetch_('fpi_records?select=id,run_id,item_code,mould_ref,machine,mixed_mode,submitted_at,customer,material,colour,pigment_code,pigment_pct,nos_cavity,batch_lot,data&machine=in.(1,2,3,4,5,6)&order=submitted_at.desc&limit=300'),
+        sbFetch_('app_settings?select=key,value&key=like.ipi_run_status:*')
+      ]);
+      const endedRunIds = new Set((statusRows||[]).filter(s=>s.value==='ended').map(s=> s.key.slice('ipi_run_status:'.length)));
+      const latestByMachine = {};
+      (runRows||[]).forEach(r=>{ if(!(r.machine in latestByMachine)) latestByMachine[r.machine] = r; });
+      runsCache = Object.values(latestByMachine).filter(r=> !endedRunIds.has(r.run_id));
+    }catch(e){ console.error(e); toast('Could not load active FPI runs.'); }
+  }
+  function activeRunForMachine(machine){
+    return runsCache.find(r=>String(r.machine)===String(machine)) || null;
+  }
+  function runBlocks(run){
+    // FPI stores each mixed-cavity product as {itemCode, cavityQty} in data.blocks
+    if(!run || !run.data || !Array.isArray(run.data.blocks)) return [];
+    return run.data.blocks.filter(b=>b.itemCode).map(b=>({itemCode:b.itemCode, cavityQty:b.cavityQty||null}));
+  }
+  // Mean of the 5-sample values from an FPI measure row's `samples` object ({1:{value},2:{value},...}).
+  function meanOfSamples_(samples){
+    if(!samples) return null;
+    const vals = [1,2,3,4,5].map(s=> parseFloat((samples[s]||{}).value)).filter(v=>!isNaN(v));
+    if(!vals.length) return null;
+    return vals.reduce((a,b)=>a+b,0)/vals.length;
+  }
+  // Cycle Time is FPI's shared shot-level sample #2 (same source Machine Parameter's
+  // read-only Cycle Time field uses) — average of its 5 samples, in seconds/shot.
+  function cycleTimeOfRun(run){
+    const row = run && run.data && run.data.sharedItems ? run.data.sharedItems[2] : null;
+    return row ? meanOfSamples_(row.samples) : null;
+  }
+  // Target shots/hour from cycle time, and target pieces/hour for a given cavity count.
+  function targetShotsPerHour(cycleTime){
+    return (cycleTime && cycleTime>0) ? 3600/cycleTime : null;
+  }
+  // A segment's cycle_time is captured once, when the job is started. If that came back empty
+  // (FPI hadn't recorded it yet, or the segment predates this field existing at all), fall back
+  // to a live lookup on the FPI record it was started from, cached per record.
+  const fpiCycleTimeCache_ = {};
+  async function cycleTimeForSegment(seg){
+    if(seg.cycle_time!=null) return seg.cycle_time;
+    if(!seg.fpi_record_id) return null;
+    if(seg.fpi_record_id in fpiCycleTimeCache_) return fpiCycleTimeCache_[seg.fpi_record_id];
+    try{
+      const rows = await sbFetch_(`fpi_records?select=data&id=eq.${seg.fpi_record_id}`);
+      const ct = (rows && rows[0]) ? cycleTimeOfRun(rows[0]) : null;
+      fpiCycleTimeCache_[seg.fpi_record_id] = ct;
+      return ct;
+    }catch(e){ return null; }
+  }
+
+  // ---- New Entry tab ----
+  let currentSegment = null;
+  let currentEntries = [];
+  let currentCavityChanges = [];
+
+  document.getElementById('pr_machine').addEventListener('change', onMachineChange);
+
+  async function onMachineChange(){
+    const machine = document.getElementById('pr_machine').value;
+    const body = document.getElementById('pr-machine-body');
+    currentSegment = null; currentEntries = []; currentCavityChanges = [];
+    if(!machine){ body.innerHTML=''; return; }
+    body.innerHTML = '<div class="pr-empty">Loading…</div>';
+    try{
+      await loadRuns();
+      const openSegs = await sbFetch_(`production_segments?select=*&machine=eq.${machine}&ended_at=is.null&order=started_at.desc&limit=1`);
+      if(openSegs && openSegs.length){
+        currentSegment = openSegs[0];
+        await Promise.all([loadEntries(), loadCavityChanges()]);
+        await renderActiveJob(machine);
+      } else {
+        renderStartJob(machine);
+      }
+    }catch(e){
+      console.error(e);
+      body.innerHTML = `<div class="pr-empty">Could not load — ${escapeHtml(e.message)}<br/>Run the setup SQL in Supabase if the production_* tables don't exist yet.</div>`;
+    }
+  }
+
+  function renderStartJob(machine){
+    const run = activeRunForMachine(machine);
+    const body = document.getElementById('pr-machine-body');
+    let runInfoHtml;
+    if(run){
+      const label = run.mixed_mode ? run.mould_ref : run.item_code;
+      const blocks = runBlocks(run);
+      const chips = run.mixed_mode && blocks.length
+        ? blocks.map(b=>`<span class="pr-chip">${escapeHtml(b.itemCode)} × ${b.cavityQty||'?'}</span>`).join('')
+        : '';
+      const cycleTime = cycleTimeOfRun(run);
+      const shotsHr = targetShotsPerHour(cycleTime);
+      const targetLine = shotsHr
+        ? `Target: ~${Math.round(shotsHr)} shots/hr (cycle ${cycleTime.toFixed(1)}s)` + (run.mixed_mode ? '' : ` → ~${Math.round(shotsHr*(run.nos_cavity||1))} pcs/hr`)
+        : 'Target: — (no Cycle Time recorded on the FPI for this run)';
+      runInfoHtml = `
+        <div class="pr-jobheader">
+          <h3>${escapeHtml(label || '(no item code)')}</h3>
+          <div class="meta">
+            Run ID: <span class="stamp">${escapeHtml(run.run_id)}</span><br/>
+            Customer: ${escapeHtml(run.customer||'—')} · Material: ${escapeHtml(run.material||'—')} · Colour: ${escapeHtml(run.colour||'—')}<br/>
+            Cavity: ${escapeHtml(run.nos_cavity||'—')}<br/>
+            ${escapeHtml(targetLine)}
+          </div>
+          ${chips ? '<div style="margin-top:8px;">'+chips+'</div>' : ''}
+        </div>`;
+    } else {
+      runInfoHtml = `<div class="pr-empty">No active FPI run on Machine ${escapeHtml(machine)} — file a First Piece Inspection for this machine first.</div>`;
+    }
+    body.innerHTML = `
+      ${runInfoHtml}
+      <div class="pr-inset" ${run ? '' : 'style="opacity:.5;pointer-events:none;"'}>
+        <div class="pr-fieldgrid">
+          <div class="pr-field"><label>Operator</label><input id="pr_start_operator" placeholder="Full name" list="pr-operator-names"/></div>
+        </div>
+        <button class="pr-btn primary" id="pr-startjob-btn">Start Job</button>
+      </div>
+    `;
+    listUserPinNames().then(names=>{
+      document.getElementById('pr-operator-names').innerHTML = names.map(n=>`<option value="${escapeHtml(n)}"></option>`).join('');
+    });
+    if(run){
+      document.getElementById('pr-startjob-btn').addEventListener('click', async ()=>{
+        const operator = document.getElementById('pr_start_operator').value.trim();
+        if(!operator){ toast('Enter the operator\'s name.'); return; }
+        try{
+          const rows = await sbFetch_('production_segments', {
+            method:'POST',
+            body: JSON.stringify({
+              run_id: run.run_id, fpi_record_id: run.id, machine: parseInt(machine),
+              mixed_mode: !!run.mixed_mode, item_code: run.item_code||null, mould_ref: run.mould_ref||null,
+              customer: run.customer||null, material: run.material||null, colour: run.colour||null,
+              nos_cavity: run.nos_cavity||null, cavity_breakdown: runBlocks(run),
+              cycle_time: cycleTimeOfRun(run),
+              started_by: operator
+            })
+          });
+          currentSegment = rows[0]; currentEntries = [];
+          toast('Job started.');
+          await renderActiveJob(machine);
+        }catch(e){ console.error(e); toast('Could not start job — ' + e.message); }
+      });
+    }
+  }
+
+  async function loadEntries(){
+    currentEntries = await sbFetch_(`production_entries?select=*,production_rejects(*)&segment_id=eq.${currentSegment.id}&order=entry_time.asc`);
+  }
+
+  async function loadCavityChanges(){
+    try{
+      currentCavityChanges = await sbFetch_(`production_cavity_changes?select=*&segment_id=eq.${currentSegment.id}&order=changed_at.asc`);
+    }catch(e){ currentCavityChanges = []; }
+  }
+
+  // Interleaves hourly/stop entries with cavity-change events into one chronological list —
+  // cavity changes live in their own table (belong to the segment, not one hourly log).
+  function mergeTimeline(entries, cavityChanges){
+    const rows = entries.map(e=>({kind:'entry', time:e.entry_time, data:e}))
+      .concat((cavityChanges||[]).map(c=>({kind:'cavity_change', time:c.changed_at, data:c})));
+    rows.sort((a,b)=> new Date(a.time)-new Date(b.time));
+    return rows;
+  }
+
+  async function renderActiveJob(machine){
+    const seg = currentSegment;
+    const label = seg.mixed_mode ? seg.mould_ref : seg.item_code;
+    // If a newer FPI run now exists for this machine but this job was never ended, hours logged
+    // here would silently get filed under the wrong item — flag it rather than proceed quietly.
+    const currentFpiRun = activeRunForMachine(machine);
+    const staleRun = currentFpiRun && currentFpiRun.run_id !== seg.run_id;
+    const effMapNow = effectiveCavityMap(seg, currentCavityChanges, Date.now());
+    const currentCavityQty = effMapNow[0] ? (parseFloat(effMapNow[0].cavityQty)||1) : (seg.nos_cavity||1);
+    const chips = seg.mixed_mode && effMapNow.length
+      ? effMapNow.map(b=>`<span class="pr-chip">${escapeHtml(b.itemCode)} × ${b.cavityQty||'?'}</span>`).join('')
+      : '';
+    const entryTotalsCache = currentEntries.map(e=>entryTotals(seg, e, currentCavityChanges));
+    const totalGood = entryTotalsCache.reduce((a,t)=>a+t.good,0);
+    const totalRejectPcs = entryTotalsCache.reduce((a,t)=>a+t.rejectPcs,0);
+    const totalRejectKg = entryTotalsCache.reduce((a,t)=>a+t.rejectKg,0);
+    const rejectPct = (totalGood+totalRejectPcs) > 0 ? (totalRejectPcs/(totalGood+totalRejectPcs)*100).toFixed(1) : '0.0';
+    const cycleTime = await cycleTimeForSegment(seg);
+    const shotsHr = targetShotsPerHour(cycleTime);
+    const targetPerHour = shotsHr ? Math.round(shotsHr * currentCavityQty) : null; // "now" pace, for the header line
+    // Each entry's own effective cavity qty, computed once and reused below for both the running
+    // shift-target total and each hour's own "vs Target" cell (previously recomputed separately
+    // in both places).
+    const entryCavityQty = currentEntries.map(e=>{
+      const m = effectiveCavityMap(seg, currentCavityChanges, e.entry_time);
+      return m[0] ? (parseFloat(m[0].cavityQty)||1) : (seg.nos_cavity||1);
+    });
+    // Shift target-so-far sums each hour's OWN target (its own effective cavity at that time) —
+    // a cavity change only shifts the comparison for hours logged after it, never retroactively.
+    let shiftTarget = null;
+    if(shotsHr){
+      shiftTarget = currentEntries.reduce((sum,e,i)=> e.is_stop ? sum : sum + Math.round(shotsHr*entryCavityQty[i]), 0);
+    }
+    const achievedPct = shiftTarget ? (totalGood/shiftTarget*100).toFixed(0) : null;
+    const targetHeaderLine = targetPerHour
+      ? `Target: ~${Math.round(shotsHr)} shots/hr → ~${targetPerHour} pcs/hr (cycle ${cycleTime.toFixed(1)}s)`
+      : 'Target: — (no Cycle Time recorded on the FPI for this run)';
+    // A stop is "active" (machine still down) when the most recent entry is a stop with no
+    // resume logged yet. Entries are ordered oldest→newest, so that's simply the last row.
+    const lastEntry = currentEntries[currentEntries.length-1];
+    const activeStop = (lastEntry && lastEntry.is_stop && !lastEntry.resumed_at) ? lastEntry : null;
+
+    const timeline = mergeTimeline(currentEntries, currentCavityChanges);
+    const rowsHtml = timeline.map(row=>{
+      if(row.kind==='cavity_change'){
+        const c = row.data;
+        return `<tr class="pr-cavrow"><td>${fmtDT(c.changed_at)}</td><td colspan="5">⚠ CAVITY CHANGE${c.item_code?' — '+escapeHtml(c.item_code):''} — ${escapeHtml(c.old_cavity==null?'?':c.old_cavity)} → ${escapeHtml(c.new_cavity)} cavities (${escapeHtml(c.reason||'Other')})${c.remarks?' · '+escapeHtml(c.remarks):''} (${escapeHtml(c.changed_by||'')})</td></tr>`;
+      }
+      const e = row.data;
+      const i = currentEntries.indexOf(e);
+      if(e.is_stop){
+        return stopRowHtml(e, currentEntries[i+1]||null, {colspan:5});
+      }
+      const t = entryTotalsCache[i];
+      const rejDetail = rejectDetailText(e);
+      const entryTargetPerHour = shotsHr ? Math.round(shotsHr*entryCavityQty[i]) : null;
+      const hourPct = entryTargetPerHour ? Math.round(t.good/entryTargetPerHour*100) : null;
+      return `<tr>
+        <td>${fmtDT(e.entry_time)}</td>
+        <td>${e.meter_reading}</td>
+        <td>${t.good}${breakdownHtml(seg,e,currentCavityChanges)}</td>
+        <td>${hourPct==null ? '—' : hourPct+'%'}</td>
+        <td>${t.rejectPcs}${t.rejectKg?' + '+t.rejectKg.toFixed(2)+'kg':''}${rejDetail ? '<div class="pr-rejectdetail">'+rejDetail+'</div>' : ''}</td>
+        <td>${escapeHtml(e.remarks||'')}</td>
+        <td>${escapeHtml(e.entered_by||'')}</td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('pr-machine-body').innerHTML = `
+      <div class="pr-jobheader">
+        <h3>${escapeHtml(label || '(no item code)')} <span class="pr-badge ok" style="font-size:10.5px;">ACTIVE</span></h3>
+        <div class="meta">
+          Run ID: <span class="stamp">${escapeHtml(seg.run_id||'—')}</span> · Started ${fmtDT(seg.started_at)} by ${escapeHtml(seg.started_by||'—')}<br/>
+          Customer: ${escapeHtml(seg.customer||'—')} · Material: ${escapeHtml(seg.material||'—')} · Colour: ${escapeHtml(seg.colour||'—')} · Cavity: ${escapeHtml(currentCavityQty||'—')}${currentCavityQty!=seg.nos_cavity && seg.nos_cavity ? ` <span style="color:var(--violet);">(was ${escapeHtml(seg.nos_cavity)})</span>` : ''}<br/>
+          ${escapeHtml(targetHeaderLine)}${achievedPct!=null ? ` — <b>${achievedPct}% of shift target so far</b>` : ''}
+        </div>
+        ${chips ? '<div style="margin-top:8px;">'+chips+'</div>' : ''}
+      </div>
+
+      ${staleRun ? `
+      <div class="pr-notebox" style="border-color:var(--ng); background:var(--ng-bg);">
+        <div style="font-weight:700;color:var(--ng);margin-bottom:6px;">⚠ A newer FPI run exists for Machine ${escapeHtml(machine)}</div>
+        <div style="font-size:12.5px;color:var(--ink);line-height:1.55;">
+          ${escapeHtml(currentFpiRun.mixed_mode ? currentFpiRun.mould_ref : currentFpiRun.item_code)} — Run <span class="stamp">${escapeHtml(currentFpiRun.run_id)}</span>, filed ${fmtDT(currentFpiRun.submitted_at)}.<br/>
+          This job is still logging against the older run <span class="stamp">${escapeHtml(seg.run_id||'—')}</span>. If the mould has actually changed, tap End Job below and Start Job again to pick up the new run — otherwise this output will be filed under the wrong item.
+        </div>
+      </div>
+      ` : ''}
+
+      <div class="pr-tablewrap">
+        <table class="pr-grid">
+          <thead><tr><th>Time</th><th>Meter</th><th>Good</th><th>vs Target</th><th>Reject (pcs)</th><th>Remarks</th><th>By</th></tr></thead>
+          <tbody>
+            ${rowsHtml || '<tr><td colspan="7" class="pr-empty">No hourly entries yet.</td></tr>'}
+            <tr class="total-row"><td>TOTAL</td><td>—</td><td>${totalGood}</td><td>${achievedPct==null?'—':achievedPct+'%'}</td><td>${totalRejectPcs} (${rejectPct}%)${totalRejectKg?' + '+totalRejectKg.toFixed(2)+'kg':''}</td><td colspan="2"></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      ${activeStop ? `
+      <div class="pr-notebox">
+        <div style="font-weight:700;color:var(--amber);margin-bottom:10px;">⏸ Machine currently stopped — ${escapeHtml(activeStop.stop_reason||'Other')} since ${fmtDT(activeStop.entry_time)} (${fmtDuration(stopDurationMinutes(activeStop))} ago)</div>
+        <div class="pr-fieldgrid" style="max-width:280px;">
+          <div class="pr-field"><label>Operator</label><input id="pr_resume_operator" value="${escapeHtml(activeStop.entered_by||'')}" list="pr-operator-names"/></div>
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;margin:10px 0;cursor:pointer;">
+          <input type="checkbox" id="pr_resume_cav_toggle"/> This stop involved a cavity change
+        </label>
+        <div id="pr-resume-cavity-fields" style="display:none;">
+          <div class="pr-fieldgrid">
+            ${seg.mixed_mode && effMapNow.length>1 ? `<div class="pr-field"><label>Item</label><select id="pr_resume_cav_item">${effMapNow.map(m=>`<option value="${escapeHtml(m.itemCode)}" data-cavity="${escapeHtml(m.cavityQty)}">${escapeHtml(m.itemCode)} (currently ${escapeHtml(m.cavityQty)})</option>`).join('')}</select></div>` : `<div class="pr-field"><label>Item</label><input value="${escapeHtml(effMapNow[0] ? effMapNow[0].itemCode : label)} — currently ${escapeHtml(effMapNow[0] ? effMapNow[0].cavityQty : currentCavityQty)}" disabled/></div>`}
+            <div class="pr-field"><label>New Cavity Count</label><input id="pr_resume_cav_new" type="number" step="1" min="0" value="${escapeHtml(effMapNow[0] ? effMapNow[0].cavityQty : '')}"/></div>
+            <div class="pr-field"><label>Cavity Change Reason</label><select id="pr_resume_cav_reason">${CAVITY_CHANGE_REASONS.map(r=>`<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('')}</select></div>
+          </div>
+        </div>
+        <button class="pr-btn primary" id="pr-resume-btn">▶ Resume Production</button>
+      </div>
+      ` : ''}
+
+      <button class="pr-btn ghost" id="pr-addentry-toggle">+ Add Hourly Entry</button>
+      <button class="pr-btn ghost" id="pr-addstop-toggle" style="margin-left:8px;">⏸ Log Machine Stop</button>
+      <div class="pr-inset" id="pr-addentry-form" style="display:none; margin-top:12px;">
+        <div class="pr-fieldgrid">
+          <div class="pr-field"><label>Meter Reading (shots this hour)</label><input id="pr_entry_meter" type="number" step="any"/></div>
+          <div class="pr-field"><label>Operator</label><input id="pr_entry_operator" value="${escapeHtml(seg.started_by||'')}" list="pr-operator-names"/></div>
+        </div>
+        <div class="pr-field" style="margin-bottom:14px;"><label>Remarks</label><input id="pr_entry_remarks" placeholder="Optional"/></div>
+        <div class="pr-section-label">Rejects (if any)</div>
+        <div id="pr-reject-rows"></div>
+        <button type="button" class="pr-btn ghost small" id="pr-addreject-btn">+ Add Reject</button>
+        <div style="margin-top:16px;">
+          <button class="pr-btn primary" id="pr-saveentry-btn">Save Entry</button>
+        </div>
+      </div>
+      <div class="pr-inset" id="pr-addstop-form" style="display:none; margin-top:12px;">
+        <div class="pr-fieldgrid">
+          <div class="pr-field"><label>Reason</label><select id="pr_stop_reason">${STOP_REASONS.map(r=>`<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('')}</select></div>
+          <div class="pr-field"><label>Operator</label><input id="pr_stop_operator" value="${escapeHtml(seg.started_by||'')}" list="pr-operator-names"/></div>
+        </div>
+        <div class="pr-field" style="margin-bottom:14px;"><label>Remarks</label><input id="pr_stop_remarks" placeholder="Optional — e.g. estimated downtime"/></div>
+        <button class="pr-btn primary" id="pr-savestop-btn">Log Machine Stop</button>
+      </div>
+
+      <div class="pr-notebox">
+        <label>Information for Next Shift</label>
+        <textarea id="pr_nextshift_note" placeholder="e.g. mould running warm, watch cavity 3…"></textarea>
+        <div class="pr-fieldgrid" style="max-width:220px;margin-bottom:0;">
+          <div class="pr-field" style="margin-bottom:8px;"><label>Operator</label><input id="pr_note_operator" value="${escapeHtml(seg.started_by||'')}" list="pr-operator-names"/></div>
+        </div>
+        <button class="pr-btn ghost small" id="pr-savenote-btn">Save Note</button>
+        <div id="pr-note-display" class="pr-notedisplay"></div>
+      </div>
+
+      <button class="pr-btn danger" id="pr-endjob-btn">End Job</button>
+    `;
+
+    document.getElementById('pr-addentry-toggle').addEventListener('click', ()=>{
+      document.getElementById('pr-addstop-form').style.display = 'none';
+      const f = document.getElementById('pr-addentry-form');
+      f.style.display = f.style.display==='none' ? '' : 'none';
+    });
+    document.getElementById('pr-addstop-toggle').addEventListener('click', ()=>{
+      document.getElementById('pr-addentry-form').style.display = 'none';
+      const f = document.getElementById('pr-addstop-form');
+      f.style.display = f.style.display==='none' ? '' : 'none';
+    });
+    document.getElementById('pr-addreject-btn').addEventListener('click', ()=>addRejectRow());
+    document.getElementById('pr-saveentry-btn').addEventListener('click', ()=>withButtonGuard('pr-saveentry-btn', saveEntry));
+    document.getElementById('pr-savestop-btn').addEventListener('click', ()=>withButtonGuard('pr-savestop-btn', saveStop));
+    document.getElementById('pr-endjob-btn').addEventListener('click', endJob);
+    if(activeStop){
+      document.getElementById('pr-resume-btn').addEventListener('click', ()=>withButtonGuard('pr-resume-btn', ()=>resumeStop(activeStop.id, machine)));
+      const resumeCavToggle = document.getElementById('pr_resume_cav_toggle');
+      resumeCavToggle.addEventListener('change', ()=>{
+        document.getElementById('pr-resume-cavity-fields').style.display = resumeCavToggle.checked ? '' : 'none';
+      });
+      const resumeCavItemSel = document.getElementById('pr_resume_cav_item');
+      if(resumeCavItemSel){
+        resumeCavItemSel.addEventListener('change', ()=>{
+          const opt = resumeCavItemSel.selectedOptions[0];
+          document.getElementById('pr_resume_cav_new').value = opt ? opt.dataset.cavity : '';
+        });
+      }
+    }
+    document.getElementById('pr-savenote-btn').addEventListener('click', ()=>withButtonGuard('pr-savenote-btn', saveNote));
+    listUserPinNames().then(names=>{
+      document.getElementById('pr-operator-names').innerHTML = names.map(n=>`<option value="${escapeHtml(n)}"></option>`).join('');
+    });
+    loadNote(machine);
+  }
+
+  function itemCodeOptionsForSegment(){
+    const seg = currentSegment;
+    if(seg.mixed_mode && (seg.cavity_breakdown||[]).length){
+      return (seg.cavity_breakdown||[]).map(b=>b.itemCode);
+    }
+    return [seg.item_code || seg.mould_ref || '(item)'];
+  }
+
+  function addRejectRow(){
+    const wrap = document.getElementById('pr-reject-rows');
+    const codes = itemCodeOptionsForSegment();
+    const row = document.createElement('div');
+    row.className = 'pr-rejectrow';
+    row.innerHTML = `
+      <select class="rr-item">${codes.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}</select>
+      <input class="rr-qty" type="number" step="any" min="0" placeholder="Qty"/>
+      <select class="rr-uom"><option value="pcs">pcs</option><option value="kg">kg</option></select>
+      <select class="rr-defect">${REJECT_DEFECTS.map(d=>`<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('')}</select>
+      <button type="button" title="Remove">×</button>
+    `;
+    row.querySelector('button').addEventListener('click', ()=>row.remove());
+    wrap.appendChild(row);
+  }
+
+  async function saveEntry(){
+    const meter = parseFloat(document.getElementById('pr_entry_meter').value);
+    const operator = document.getElementById('pr_entry_operator').value.trim();
+    const remarks = document.getElementById('pr_entry_remarks').value.trim();
+    if(isNaN(meter) || meter<0){ toast('Enter the meter reading (shots this hour).'); return; }
+    if(!operator){ toast('Enter the operator\'s name.'); return; }
+    const rejectRows = Array.from(document.querySelectorAll('#pr-reject-rows .pr-rejectrow')).map(r=>({
+      item_code: r.querySelector('.rr-item').value,
+      qty: parseFloat(r.querySelector('.rr-qty').value) || 0,
+      uom: r.querySelector('.rr-uom').value,
+      defect_type: r.querySelector('.rr-defect').value
+    })).filter(r=>r.qty>0);
+    const t = entryTotals(currentSegment, { meter_reading: meter, production_rejects: rejectRows }, currentCavityChanges);
+    try{
+      const entryRows = await sbFetch_('production_entries', {
+        method:'POST',
+        body: JSON.stringify({
+          segment_id: currentSegment.id, meter_reading: meter, good_qty: t.good,
+          reject_pcs: t.rejectPcs, remarks: remarks||null, entered_by: operator
+        })
+      });
+      const entry = entryRows[0];
+      if(rejectRows.length){
+        await sbFetch_('production_rejects', {
+          method:'POST',
+          body: JSON.stringify(rejectRows.map(r=>Object.assign({entry_id: entry.id}, r)))
+        });
+      }
+      toast('Entry saved.');
+      await Promise.all([loadEntries(), loadCavityChanges()]);
+      await renderActiveJob(document.getElementById('pr_machine').value);
+    }catch(e){ console.error(e); toast('Could not save entry — ' + e.message); }
+  }
+
+  async function saveStop(){
+    const reason = document.getElementById('pr_stop_reason').value;
+    const operator = document.getElementById('pr_stop_operator').value.trim();
+    const remarks = document.getElementById('pr_stop_remarks').value.trim();
+    if(!operator){ toast('Enter the operator\'s name.'); return; }
+    try{
+      await sbFetch_('production_entries', {
+        method:'POST',
+        body: JSON.stringify({
+          segment_id: currentSegment.id, meter_reading: 0, good_qty: 0, reject_pcs: 0,
+          is_stop: true, stop_reason: reason, remarks: remarks||null, entered_by: operator
+        })
+      });
+      toast('Machine stop logged.');
+      await Promise.all([loadEntries(), loadCavityChanges()]);
+      await renderActiveJob(document.getElementById('pr_machine').value);
+    }catch(e){ console.error(e); toast('Could not log stop — ' + e.message); }
+  }
+
+  // Cavity Change is logged at Resume, not at Stop time — the real floor sequence is: reject
+  // rate spikes, operator stops the machine under whatever reason applies (Mould Issue, etc.),
+  // a technician diagnoses it, and only THEN is it known whether a cavity change was the fix.
+  // Resume is the moment that outcome is actually known.
+  async function resumeStop(entryId, machine){
+    const seg = currentSegment;
+    const operator = document.getElementById('pr_resume_operator').value.trim();
+    if(!operator){ toast('Enter the operator\'s name.'); return; }
+    const cavToggle = document.getElementById('pr_resume_cav_toggle');
+    const logCavity = cavToggle && cavToggle.checked;
+    let cavityPayload = null;
+    if(logCavity){
+      const effMapNow = effectiveCavityMap(seg, currentCavityChanges, Date.now());
+      const itemSelect = document.getElementById('pr_resume_cav_item');
+      const itemCode = itemSelect ? itemSelect.value : (effMapNow[0] ? effMapNow[0].itemCode : (seg.item_code||seg.mould_ref||'(item)'));
+      const newCavity = parseFloat(document.getElementById('pr_resume_cav_new').value);
+      const cavReason = document.getElementById('pr_resume_cav_reason').value;
+      if(isNaN(newCavity) || newCavity<0){ toast('Enter the new cavity count.'); return; }
+      const current = effMapNow.find(m=>m.itemCode===itemCode);
+      cavityPayload = { segment_id: seg.id, item_code: itemCode, old_cavity: current ? current.cavityQty : null, new_cavity: newCavity, reason: cavReason, changed_by: operator };
+    }
+    try{
+      await sbFetch_(`production_entries?id=eq.${entryId}`, {
+        method:'PATCH',
+        body: JSON.stringify({ resumed_at: new Date().toISOString(), resumed_by: operator })
+      });
+      if(cavityPayload){
+        await sbFetch_('production_cavity_changes', { method:'POST', body: JSON.stringify(cavityPayload) });
+      }
+      toast(logCavity ? 'Production resumed + cavity change logged.' : 'Production resumed.');
+      await Promise.all([loadEntries(), loadCavityChanges()]);
+      await renderActiveJob(machine);
+    }catch(e){ console.error(e); toast('Could not log resume — ' + e.message); }
+  }
+
+  async function endJob(){
+    const operator = prompt('Operator name ending this job:', currentSegment.started_by || '');
+    if(operator===null) return;
+    if(!confirm('End this job? You can start a new one right after for the next mould/product.')) return;
+    try{
+      await sbFetch_(`production_segments?id=eq.${currentSegment.id}`, {
+        method:'PATCH',
+        body: JSON.stringify({ ended_at: new Date().toISOString(), ended_by: operator.trim()||null })
+      });
+      toast('Job ended.');
+      onMachineChange();
+    }catch(e){ console.error(e); toast('Could not end job — ' + e.message); }
+  }
+
+  async function loadNote(machine){
+    try{
+      const rows = await sbFetch_(`production_notes?select=*&machine=eq.${machine}`);
+      const el = document.getElementById('pr-note-display');
+      if(rows && rows.length && rows[0].note){
+        el.textContent = `Last note (${fmtDT(rows[0].updated_at)} by ${rows[0].updated_by||'—'}): ${rows[0].note}`;
+      } else {
+        el.textContent = 'No note left for the next shift.';
+      }
+    }catch(e){ console.error(e); }
+  }
+
+  async function saveNote(){
+    const machine = document.getElementById('pr_machine').value;
+    const note = document.getElementById('pr_nextshift_note').value.trim();
+    const operator = document.getElementById('pr_note_operator').value.trim();
+    if(!note){ toast('Write a note first.'); return; }
+    if(!operator){ toast('Enter the operator\'s name.'); return; }
+    try{
+      await sbFetch_('production_notes', {
+        method:'POST',
+        headers: { 'Prefer': 'resolution=merge-duplicates,return=representation' },
+        body: JSON.stringify({ machine: parseInt(machine), note, updated_by: operator||null, updated_at: new Date().toISOString() })
+      });
+      toast('Note saved for next shift.');
+      document.getElementById('pr_nextshift_note').value = '';
+      loadNote(machine);
+    }catch(e){ console.error(e); toast('Could not save note — ' + e.message); }
+  }
+
+  // ---- Records tab ----
+  const todayStr = new Date().toISOString().slice(0,10);
+  document.getElementById('pr_rec_from').value = todayStr;
+  document.getElementById('pr_rec_to').value = todayStr;
+  document.getElementById('pr_dash_from').value = todayStr;
+  document.getElementById('pr_dash_to').value = todayStr;
+
+  let recSegCache = [];
+  document.getElementById('pr-rec-load').addEventListener('click', loadRecords);
+  async function loadRecords(){
+    const machine = document.getElementById('pr_rec_machine').value;
+    const from = document.getElementById('pr_rec_from').value;
+    const to = document.getElementById('pr_rec_to').value;
+    const list = document.getElementById('pr-records-list');
+    list.innerHTML = '<div class="pr-empty">Loading…</div>';
+    try{
+      // Filter the SEGMENT list by overlap with the date range (a job can span multiple days),
+      // and separately filter the embedded entries themselves by entry_time — otherwise a
+      // long-running job would drag in entries from outside the selected range.
+      let filters = '';
+      if(machine) filters += `&machine=eq.${machine}`;
+      if(to) filters += `&started_at=lte.${to}T23:59:59`;
+      if(from) filters += `&or=(ended_at.is.null,ended_at.gte.${from}T00:00:00)`;
+      if(from) filters += `&production_entries.entry_time=gte.${from}T00:00:00`;
+      if(to) filters += `&production_entries.entry_time=lte.${to}T23:59:59`;
+      try{
+        // Cavity changes aren't date-filtered — earlier ones still apply to later entries' math.
+        recSegCache = await sbFetch_(`production_segments?select=*,production_entries(*,production_rejects(*)),production_cavity_changes(*)&order=started_at.desc&production_entries.order=entry_time.asc&production_cavity_changes.order=changed_at.asc${filters}`);
+      }catch(e){
+        // production_cavity_changes may not exist yet (migration not run) — fall back without it.
+        recSegCache = await sbFetch_(`production_segments?select=*,production_entries(*,production_rejects(*))&order=started_at.desc&production_entries.order=entry_time.asc${filters}`);
+      }
+      renderRecords();
+    }catch(e){ console.error(e); list.innerHTML = '<div class="pr-empty">Could not load records.</div>'; }
+  }
+  function totalsFromEntries(entries){
+    const good = entries.reduce((a,e)=>a+(parseFloat(e.good_qty)||0),0);
+    const rejectPcs = entries.reduce((a,e)=>a+(parseFloat(e.reject_pcs)||0),0);
+    const pct = (good+rejectPcs)>0 ? (rejectPcs/(good+rejectPcs)*100).toFixed(1) : '0.0';
+    // Only sum durations we actually know (resumed, or still genuinely ongoing) — a stop logged
+    // before the Resume feature existed, followed by a later entry, has no recorded end time and
+    // must not be counted as 0 (understates downtime) or guessed at (fabricates a number).
+    let downtimeMin = 0;
+    entries.forEach((e,i)=>{
+      if(!e.is_stop) return;
+      const d = describeStop(e, entries[i+1]||null);
+      if(d.minutes!=null) downtimeMin += d.minutes;
+    });
+    return {good, rejectPcs, pct, downtimeMin};
+  }
+  function segTotals(seg){
+    const entries = seg.production_entries || [];
+    return Object.assign({entries}, totalsFromEntries(entries));
+  }
+  function renderRecords(){
+    const list = document.getElementById('pr-records-list');
+    if(!recSegCache.length){ list.innerHTML = '<div class="pr-empty">No production segments in this range.</div>'; document.getElementById('pr-rec-summary').textContent=''; return; }
+    const groupBy = document.getElementById('pr_rec_groupby').value;
+    if(groupBy==='operator'){ renderRecordsByOperator(); return; }
+    if(groupBy==='day'){ renderRecordsByDay(); return; }
+    let totalGood=0, totalReject=0;
+    const html = recSegCache.map((seg,idx)=>{
+      const t = segTotals(seg);
+      totalGood += t.good; totalReject += t.rejectPcs;
+      const label = seg.mixed_mode ? seg.mould_ref : seg.item_code;
+      const rowsHtml = t.entries.map((e,i)=>{
+        if(e.is_stop){
+          return stopRowHtml(e, t.entries[i+1]||null, {colspan:5});
+        }
+        const rejDetail = rejectDetailText(e);
+        return `<tr><td>${fmtDT(e.entry_time)}</td><td>${e.meter_reading}</td><td>${e.good_qty}${breakdownHtml(seg,e,seg.production_cavity_changes)}</td><td>${e.reject_pcs}${rejDetail?'<div class="pr-rejectdetail">'+rejDetail+'</div>':''}</td><td>${escapeHtml(e.remarks||'')}</td><td>${escapeHtml(e.entered_by||'')}</td></tr>`;
+      }).join('');
+      const cavCount = (seg.production_cavity_changes||[]).length;
+      return `
+        <div class="pr-segcard">
+          <div class="pr-segcard-head" data-idx="${idx}">
+            <div><b>M${escapeHtml(seg.machine)} — ${escapeHtml(label||'—')}</b><br/>
+              <span style="font-size:11.5px;color:#7a7d78;">${fmtDT(seg.started_at)} → ${seg.ended_at?fmtDT(seg.ended_at):'still running'} · by ${escapeHtml(seg.started_by||'—')}</span>
+            </div>
+            <div><span class="pr-badge ok">${t.good} good</span> <span class="pr-badge ${t.rejectPcs>0?'ng':'ok'}">${t.rejectPcs} reject (${t.pct}%)</span>${t.downtimeMin>0?` <span class="pr-badge amber">${fmtDuration(t.downtimeMin)} downtime</span>`:''}${cavCount>0?` <span class="pr-badge violet">${cavCount} cavity change${cavCount===1?'':'s'}</span>`:''}</div>
+          </div>
+          <div class="pr-segcard-body" id="pr-segbody-${idx}">
+            <div class="pr-tablewrap"><table class="pr-grid">
+              <thead><tr><th>Time</th><th>Meter</th><th>Good</th><th>Reject</th><th>Remarks</th><th>By</th></tr></thead>
+              <tbody>${rowsHtml || '<tr><td colspan="6" class="pr-empty">No hourly entries.</td></tr>'}</tbody>
+            </table></div>
+          </div>
+        </div>`;
+    }).join('');
+    list.innerHTML = html;
+    const overallPct = (totalGood+totalReject)>0 ? (totalReject/(totalGood+totalReject)*100).toFixed(1) : '0.0';
+    document.getElementById('pr-rec-summary').textContent = `${recSegCache.length} segment(s) · ${totalGood} good · ${totalReject} reject (${overallPct}%)`;
+    list.querySelectorAll('.pr-segcard-head').forEach(h=>{
+      h.addEventListener('click', ()=>{
+        document.getElementById('pr-segbody-'+h.dataset.idx).classList.toggle('open');
+      });
+    });
+  }
+  // Re-buckets every entry across all loaded segments by (calendar day, machine, item/mould) —
+  // a job spanning several days shows as one card per day it was actually worked, instead of one
+  // card for the whole job's lifetime. Mirrors how the Daily Summary already concludes per day.
+  function buildDaySegments(){
+    const buckets = {};
+    recSegCache.forEach(seg=>{
+      const label = seg.mixed_mode ? seg.mould_ref : seg.item_code;
+      (seg.production_entries||[]).forEach(e=>{
+        const day = (e.entry_time||'').slice(0,10);
+        const key = day+'|'+seg.machine+'|'+label;
+        if(!buckets[key]) buckets[key] = { day, seg, label, entries: [] };
+        buckets[key].entries.push(e);
+      });
+    });
+    return Object.values(buckets).sort((a,b)=> b.day.localeCompare(a.day) || String(a.seg.machine).localeCompare(String(b.seg.machine)));
+  }
+  function renderRecordsByDay(){
+    const list = document.getElementById('pr-records-list');
+    const buckets = buildDaySegments();
+    if(!buckets.length){ list.innerHTML = '<div class="pr-empty">No hourly entries in this range.</div>'; document.getElementById('pr-rec-summary').textContent=''; return; }
+    let totalGood=0, totalReject=0, currentDay=null;
+    const parts = [];
+    buckets.forEach((b,idx)=>{
+      const entries = b.entries.slice().sort((a,c)=> new Date(a.entry_time)-new Date(c.entry_time));
+      const t = totalsFromEntries(entries);
+      totalGood += t.good; totalReject += t.rejectPcs;
+      if(b.day !== currentDay){
+        currentDay = b.day;
+        const dateLabel = new Date(b.day+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+        parts.push(`<div class="pr-daydivider">${escapeHtml(dateLabel)}</div>`);
+      }
+      const rowsHtml = entries.map((e,i)=>{
+        if(e.is_stop){
+          return stopRowHtml(e, entries[i+1]||null, {colspan:5});
+        }
+        const rejDetail = rejectDetailText(e);
+        return `<tr><td>${fmtDT(e.entry_time)}</td><td>${e.meter_reading}</td><td>${e.good_qty}${breakdownHtml(b.seg,e,b.seg.production_cavity_changes)}</td><td>${e.reject_pcs}${rejDetail?'<div class="pr-rejectdetail">'+rejDetail+'</div>':''}</td><td>${escapeHtml(e.remarks||'')}</td><td>${escapeHtml(e.entered_by||'')}</td></tr>`;
+      }).join('');
+      const cavCount = (b.seg.production_cavity_changes||[]).filter(c=>(c.changed_at||'').slice(0,10)===b.day).length;
+      parts.push(`
+        <div class="pr-segcard">
+          <div class="pr-segcard-head" data-idx="${idx}">
+            <div><b>M${escapeHtml(b.seg.machine)} — ${escapeHtml(b.label||'—')}</b><br/>
+              <span style="font-size:11.5px;color:#7a7d78;">${entries.length} entr${entries.length===1?'y':'ies'} logged this day</span>
+            </div>
+            <div><span class="pr-badge ok">${t.good} good</span> <span class="pr-badge ${t.rejectPcs>0?'ng':'ok'}">${t.rejectPcs} reject (${t.pct}%)</span>${t.downtimeMin>0?` <span class="pr-badge amber">${fmtDuration(t.downtimeMin)} downtime</span>`:''}${cavCount>0?` <span class="pr-badge violet">${cavCount} cavity change${cavCount===1?'':'s'}</span>`:''}</div>
+          </div>
+          <div class="pr-segcard-body" id="pr-daybody-${idx}">
+            <div class="pr-tablewrap"><table class="pr-grid">
+              <thead><tr><th>Time</th><th>Meter</th><th>Good</th><th>Reject</th><th>Remarks</th><th>By</th></tr></thead>
+              <tbody>${rowsHtml || '<tr><td colspan="6" class="pr-empty">No hourly entries.</td></tr>'}</tbody>
+            </table></div>
+          </div>
+        </div>`);
+    });
+    list.innerHTML = parts.join('');
+    const overallPct = (totalGood+totalReject)>0 ? (totalReject/(totalGood+totalReject)*100).toFixed(1) : '0.0';
+    document.getElementById('pr-rec-summary').textContent = `${buckets.length} job-day record(s) · ${totalGood} good · ${totalReject} reject (${overallPct}%)`;
+    list.querySelectorAll('.pr-segcard-head').forEach(h=>{
+      h.addEventListener('click', ()=>{
+        document.getElementById('pr-daybody-'+h.dataset.idx).classList.toggle('open');
+      });
+    });
+  }
+  function renderRecordsByOperator(){
+    const list = document.getElementById('pr-records-list');
+    const nextEntryMap = buildNextEntryMap(recSegCache);
+    const byOp = {};
+    recSegCache.forEach(seg=>{
+      const label = seg.mixed_mode ? seg.mould_ref : seg.item_code;
+      (seg.production_entries||[]).forEach(e=>{
+        const op = e.entered_by || '(unnamed)';
+        if(!byOp[op]) byOp[op] = { entries: [], good: 0, reject: 0 };
+        byOp[op].entries.push(Object.assign({}, e, { _machine: seg.machine, _label: label, _seg: seg }));
+        if(!e.is_stop){ byOp[op].good += parseFloat(e.good_qty)||0; byOp[op].reject += parseFloat(e.reject_pcs)||0; }
+      });
+    });
+    const ops = Object.keys(byOp).sort((a,b)=>a.localeCompare(b));
+    if(!ops.length){ list.innerHTML = '<div class="pr-empty">No hourly entries in this range.</div>'; document.getElementById('pr-rec-summary').textContent=''; return; }
+    let totalGood=0, totalReject=0;
+    const html = ops.map((op,idx)=>{
+      const d = byOp[op];
+      totalGood += d.good; totalReject += d.reject;
+      const pct = (d.good+d.reject)>0 ? (d.reject/(d.good+d.reject)*100).toFixed(1) : '0.0';
+      const entries = d.entries.slice().sort((a,b)=> new Date(a.entry_time)-new Date(b.entry_time));
+      const rowsHtml = entries.map(e=>{
+        if(e.is_stop){
+          return stopRowHtml(e, nextEntryMap.get(e.id)||null, {colspan:4, showOperator:false, leadingCells:`<td>M${escapeHtml(e._machine)}</td>`});
+        }
+        const rejDetail = rejectDetailText(e);
+        return `<tr><td>${fmtDT(e.entry_time)}</td><td>M${escapeHtml(e._machine)} — ${escapeHtml(e._label||'—')}</td><td>${e.meter_reading}</td><td>${e.good_qty}${breakdownHtml(e._seg,e,e._seg.production_cavity_changes)}</td><td>${e.reject_pcs}${rejDetail?'<div class="pr-rejectdetail">'+rejDetail+'</div>':''}</td><td>${escapeHtml(e.remarks||'')}</td></tr>`;
+      }).join('');
+      return `
+        <div class="pr-segcard">
+          <div class="pr-segcard-head" data-idx="${idx}">
+            <div><b>${escapeHtml(op)}</b><br/>
+              <span style="font-size:11.5px;color:#7a7d78;">${entries.length} entr${entries.length===1?'y':'ies'} across ${new Set(entries.map(e=>e._machine)).size} machine(s)</span>
+            </div>
+            <div><span class="pr-badge ok">${d.good} good</span> <span class="pr-badge ${d.reject>0?'ng':'ok'}">${d.reject} reject (${pct}%)</span></div>
+          </div>
+          <div class="pr-segcard-body" id="pr-segbody-${idx}">
+            <div class="pr-tablewrap"><table class="pr-grid">
+              <thead><tr><th>Time</th><th>Machine / Item</th><th>Meter</th><th>Good</th><th>Reject</th><th>Remarks</th></tr></thead>
+              <tbody>${rowsHtml || '<tr><td colspan="6" class="pr-empty">No hourly entries.</td></tr>'}</tbody>
+            </table></div>
+          </div>
+        </div>`;
+    }).join('');
+    list.innerHTML = html;
+    const overallPct = (totalGood+totalReject)>0 ? (totalReject/(totalGood+totalReject)*100).toFixed(1) : '0.0';
+    document.getElementById('pr-rec-summary').textContent = `${ops.length} operator(s) · ${totalGood} good · ${totalReject} reject (${overallPct}%)`;
+    list.querySelectorAll('.pr-segcard-head').forEach(h=>{
+      h.addEventListener('click', ()=>{
+        document.getElementById('pr-segbody-'+h.dataset.idx).classList.toggle('open');
+      });
+    });
+  }
+  document.getElementById('pr-rec-csv').addEventListener('click', ()=>{
+    if(!recSegCache.length){ toast('Load records first.'); return; }
+    const lines = [['Machine','Item/Mould','Run ID','Segment Start','Segment End','Time','Type','Meter','Good','Reject Pcs','Reject Detail','Remarks','Operator','Resumed At','Resumed By','Downtime (min)'].join(',')];
+    const nextEntryMap = buildNextEntryMap(recSegCache);
+    recSegCache.forEach(seg=>{
+      const label = seg.mixed_mode ? seg.mould_ref : seg.item_code;
+      (seg.production_entries||[]).forEach(e=>{
+        const type = e.is_stop ? ('STOP: '+(e.stop_reason||'Other')) : 'Hourly';
+        const rejDetail = (e.production_rejects||[]).map(r=>`${r.item_code||''} ${r.qty}${r.uom} (${r.defect_type||''})`).join('; ');
+        let downtime = '';
+        if(e.is_stop){
+          const d = describeStop(e, nextEntryMap.get(e.id)||null);
+          downtime = d.minutes!=null ? d.minutes : (d.state==='unrecorded' ? 'not recorded' : '');
+        }
+        lines.push([seg.machine, label, seg.run_id, seg.started_at, seg.ended_at||'', e.entry_time, type, e.meter_reading, e.good_qty, e.reject_pcs, rejDetail, e.remarks||'', e.entered_by||'', e.resumed_at||'', e.resumed_by||'', downtime]
+          .map(v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`).join(','));
+      });
+      (seg.production_cavity_changes||[]).forEach(c=>{
+        const rejDetail = `${c.old_cavity==null?'?':c.old_cavity} → ${c.new_cavity} cavities${c.item_code?' ('+c.item_code+')':''}`;
+        lines.push([seg.machine, label, seg.run_id, seg.started_at, seg.ended_at||'', c.changed_at, 'CAVITY CHANGE: '+(c.reason||'Other'), '', '', '', rejDetail, c.remarks||'', c.changed_by||'', '', '', '']
+          .map(v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`).join(','));
+      });
+    });
+    const blob = new Blob([lines.join('\n')], {type:'text/csv'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `production-report-${todayStr}.csv`;
+    a.click();
+  });
+
+  // ---- Operator Dashboard tab ----
+  document.getElementById('pr-dash-load').addEventListener('click', loadDashboard);
+  async function loadDashboard(){
+    const from = document.getElementById('pr_dash_from').value;
+    const to = document.getElementById('pr_dash_to').value;
+    const table = document.getElementById('pr-dash-table');
+    table.innerHTML = '<div class="pr-empty">Loading…</div>';
+    try{
+      let path = `production_entries?select=good_qty,reject_pcs,entered_by,entry_time,is_stop&order=entry_time.asc`;
+      if(from) path += `&entry_time=gte.${from}T00:00:00`;
+      if(to) path += `&entry_time=lte.${to}T23:59:59`;
+      const entries = await sbFetch_(path);
+      const byOp = {};
+      (entries||[]).forEach(e=>{
+        const op = e.entered_by || '(unnamed)';
+        if(!byOp[op]) byOp[op] = {good:0, reject:0, count:0, stops:0};
+        if(e.is_stop){ byOp[op].stops += 1; return; }
+        byOp[op].good += parseFloat(e.good_qty)||0;
+        byOp[op].reject += parseFloat(e.reject_pcs)||0;
+        byOp[op].count += 1;
+      });
+      const rows = Object.keys(byOp).map(op=>{
+        const d = byOp[op];
+        const pct = (d.good+d.reject)>0 ? (d.reject/(d.good+d.reject)*100).toFixed(1) : '0.0';
+        return {op, ...d, pct};
+      }).sort((a,b)=>b.good-a.good);
+      if(!rows.length){ table.innerHTML = '<div class="pr-empty">No hourly entries in this range.</div>'; return; }
+      table.innerHTML = `
+        <div class="pr-tablewrap"><table class="pr-grid">
+          <thead><tr><th>Operator</th><th>Hourly Entries</th><th>Good Qty</th><th>Reject Qty</th><th>Reject %</th><th>Stops Logged</th></tr></thead>
+          <tbody>${rows.map(r=>`<tr><td>${escapeHtml(r.op)}</td><td>${r.count}</td><td>${r.good}</td><td>${r.reject}</td><td>${r.pct}%</td><td>${r.stops}</td></tr>`).join('')}</tbody>
+        </table></div>`;
+    }catch(e){ console.error(e); table.innerHTML = '<div class="pr-empty">Could not load dashboard.</div>'; }
+  }
+
+  // ---- Daily Summary tab (WhatsApp-ready text — copy/paste, no auto-send) ----
+  document.getElementById('pr_sum_date').value = todayStr;
+  document.getElementById('pr-sum-load').addEventListener('click', generateSummary);
+  document.getElementById('pr-sum-copy').addEventListener('click', ()=>{
+    const ta = document.getElementById('pr-sum-text');
+    ta.select();
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(ta.value).then(()=>toast('Copied — paste it into WhatsApp.')).catch(()=>{
+        document.execCommand('copy'); toast('Copied — paste it into WhatsApp.');
+      });
+    } else {
+      document.execCommand('copy'); toast('Copied — paste it into WhatsApp.');
+    }
+  });
+
+  async function generateSummary(){
+    const date = document.getElementById('pr_sum_date').value;
+    if(!date){ toast('Pick a date.'); return; }
+    const outWrap = document.getElementById('pr-sum-output');
+    const emptyEl = document.getElementById('pr-sum-empty');
+    emptyEl.textContent = 'Loading…'; emptyEl.style.display=''; outWrap.style.display='none';
+    try{
+      const entries = await sbFetch_(`production_entries?select=*,production_rejects(*),production_segments(machine,item_code,mould_ref,mixed_mode,cycle_time,nos_cavity,cavity_breakdown,fpi_record_id)&entry_time=gte.${date}T00:00:00&entry_time=lte.${date}T23:59:59&order=entry_time.asc`);
+      if(!entries || !entries.length){
+        emptyEl.textContent = 'No production entries logged for this date.';
+        return;
+      }
+      // Group by machine, then by item/mould label within that machine (a machine can run more
+      // than one job in a day via mould changes — each still gets its own line).
+      // Next-entry-per-segment lookup (entries are already ordered oldest→newest globally, which
+      // preserves relative order within each segment) — needed so a stop's duration is only
+      // reported as "known" or "ongoing" when that's actually true, never guessed at.
+      const entriesBySeg = {};
+      entries.forEach(e=>{ (entriesBySeg[e.segment_id] = entriesBySeg[e.segment_id]||[]).push(e); });
+      const nextEntryOf = new Map();
+      Object.values(entriesBySeg).forEach(list=> list.forEach((e,i)=> nextEntryOf.set(e.id, list[i+1]||null)));
+
+      // Cavity changes per segment (may not exist yet if the migration hasn't been run — fall
+      // back to none rather than breaking the whole summary).
+      const segIds = [...new Set(entries.map(e=>e.segment_id))];
+      let changesBySeg = {};
+      try{
+        const cavityChangesFlat = await sbFetch_(`production_cavity_changes?select=*&segment_id=in.(${segIds.join(',')})`);
+        cavityChangesFlat.forEach(c=>{ (changesBySeg[c.segment_id] = changesBySeg[c.segment_id]||[]).push(c); });
+      }catch(e){ changesBySeg = {}; }
+
+      // Good/Reject come straight from each entry's own stored good_qty/reject_pcs — those were
+      // already computed cavity-correctly at save time, so no recompute (or cavity data) needed
+      // here. rejectKg is independent of cavity math entirely (kg rejects aren't split by item).
+      const byMachine = {};
+      entries.forEach(e=>{
+        const seg = e.production_segments || {};
+        const m = seg.machine;
+        if(!byMachine[m]) byMachine[m] = {};
+        const label = seg.mixed_mode ? (seg.mould_ref||'—') : (seg.item_code||'—');
+        if(!byMachine[m][label]) byMachine[m][label] = { seg, segmentId: e.segment_id, good:0, rejectPcs:0, rejectKg:0, stops:[], stopMinutes:0, stopUnrecorded:false, byItem:{} };
+        const job = byMachine[m][label];
+        if(e.is_stop){
+          const d = describeStop(e, nextEntryOf.get(e.id));
+          job.stops.push(e.stop_reason||'Other');
+          if(d.minutes!=null) job.stopMinutes += d.minutes;
+          else job.stopUnrecorded = true;
+        } else {
+          job.good += parseFloat(e.good_qty)||0;
+          job.rejectPcs += parseFloat(e.reject_pcs)||0;
+          job.rejectKg += (e.production_rejects||[]).filter(r=>r.uom==='kg').reduce((s,r)=>s+(parseFloat(r.qty)||0),0);
+          // Per-item split for a mixed-cavity mould (e.g. Machine 5 running 4W20 × 2 + 3W20 × 2
+          // in one mould) — the aggregate good_qty column doesn't carry this, so it's the one
+          // thing here that still needs a real recompute via the cavity-aware breakdown.
+          if(seg.mixed_mode){
+            entryBreakdown(seg, e, changesBySeg[e.segment_id]).forEach(b=>{
+              if(!job.byItem[b.itemCode]) job.byItem[b.itemCode] = {good:0, rejectPcs:0};
+              job.byItem[b.itemCode].good += b.good;
+              job.byItem[b.itemCode].rejectPcs += b.rejPcs;
+            });
+          }
+        }
+      });
+
+      // OT visibility: each machine's actual run window for the day, from its earliest logged
+      // entry to its latest (a stop's end is its resume time if resumed, else when it was logged).
+      // This surfaces machines running long without needing a per-machine shift schedule to maintain.
+      const machineWindow = {};
+      entries.forEach(e=>{
+        const seg = e.production_segments || {};
+        const m = seg.machine;
+        const start = new Date(e.entry_time).getTime();
+        const end = e.resumed_at ? new Date(e.resumed_at).getTime() : start;
+        if(!machineWindow[m]) machineWindow[m] = {min:start, max:end};
+        else { machineWindow[m].min = Math.min(machineWindow[m].min, start); machineWindow[m].max = Math.max(machineWindow[m].max, end); }
+      });
+
+      // Per operator, broken down by machine: actual good/reject, plus a target built by
+      // summing each logged hour's own job target rate — an operator who changed mould on the
+      // same machine mid-day still gets one fair blended target for that machine.
+      const byMachineOp = {};
+      for(const e of entries){
+        const seg = e.production_segments || {};
+        const m = seg.machine;
+        const op = e.entered_by || '(unnamed)';
+        if(!byMachineOp[m]) byMachineOp[m] = {};
+        if(!byMachineOp[m][op]) byMachineOp[m][op] = {good:0, reject:0, target:0, hasTarget:false};
+        if(!e.is_stop){
+          byMachineOp[m][op].good += parseFloat(e.good_qty)||0;
+          byMachineOp[m][op].reject += parseFloat(e.reject_pcs)||0;
+          const ct = await cycleTimeForSegment(seg);
+          const shotsHr = targetShotsPerHour(ct);
+          if(shotsHr){
+            const effMap = effectiveCavityMap(seg, changesBySeg[e.segment_id], e.entry_time);
+            const q = effMap[0] ? (parseFloat(effMap[0].cavityQty)||1) : (seg.nos_cavity||1);
+            byMachineOp[m][op].target += shotsHr * q;
+            byMachineOp[m][op].hasTarget = true;
+          }
+        }
+      }
+
+      // Resolve each job's cycle time (falling back to a live FPI lookup for jobs started
+      // before cycle_time was captured, or before the FPI had recorded one).
+      const machineNums = Object.keys(byMachine).sort((a,b)=>a-b);
+      for(const m of machineNums){
+        for(const job of Object.values(byMachine[m])){
+          job.cycleTime = await cycleTimeForSegment(job.seg);
+        }
+      }
+
+      const dateLabel = new Date(date+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+      const lines = [];
+      lines.push(`📋 *RB Diversified — Daily Production Summary*`);
+      lines.push(`📅 ${dateLabel}`);
+      lines.push('');
+      // Each machine is a self-contained card: its job(s), who ran it, then that machine's own
+      // subtotal — instead of one operator list and one total pooled across every machine.
+      machineNums.forEach(m=>{
+        lines.push(`🏭 *Machine ${m}*`);
+        const win = machineWindow[m];
+        if(win){
+          const spanMin = Math.round((win.max-win.min)/60000);
+          lines.push(`  🕐 Ran ${fmtTime(win.min)}–${fmtTime(win.max)} (${fmtDuration(spanMin)})`);
+        }
+        let mGood=0, mReject=0, mStops=0, mStopMin=0, mHasUnrecorded=false;
+        Object.values(byMachine[m]).forEach(job=>{
+          const shotsHr = targetShotsPerHour(job.cycleTime);
+          // "Current" pace — the cavity count effective right now, not whatever the job started with.
+          const effMapNow = effectiveCavityMap(job.seg, changesBySeg[job.segmentId], Date.now());
+          const currentCavityQty = effMapNow[0] ? (parseFloat(effMapNow[0].cavityQty)||1) : (job.seg.nos_cavity||1);
+          const targetPerHour = shotsHr ? Math.round(shotsHr*currentCavityQty) : null;
+          const pct = (job.good+job.rejectPcs)>0 ? (job.rejectPcs/(job.good+job.rejectPcs)*100).toFixed(1) : '0.0';
+          const label = job.seg.mixed_mode ? job.seg.mould_ref : job.seg.item_code;
+          lines.push(`  ${label||'(item)'}`);
+          lines.push(`  ✅ Good: ${job.good.toLocaleString()} pcs`);
+          lines.push(`  ❌ Reject: ${job.rejectPcs.toLocaleString()} pcs (${pct}%)${job.rejectKg?' + '+job.rejectKg.toFixed(2)+'kg':''}`);
+          const itemCodes = Object.keys(job.byItem);
+          if(itemCodes.length>1){
+            itemCodes.forEach(code=>{
+              const d = job.byItem[code];
+              lines.push(`    • ${code}: ${d.good.toLocaleString()} good / ${d.rejectPcs.toLocaleString()} reject`);
+            });
+          }
+          if(targetPerHour) lines.push(`  🎯 Target: ~${Math.round(shotsHr)} shots/hr → ~${targetPerHour} pcs/hr`);
+          if(job.stops.length){
+            const dtLabel = fmtDuration(job.stopMinutes) + (job.stopUnrecorded ? '+ (some not recorded)' : '');
+            lines.push(`  ⏸ Stops: ${job.stops.length} (${job.stops.join(', ')}) · Downtime: ${dtLabel}`);
+          }
+          const cavChanges = changesBySeg[job.segmentId] || [];
+          if(cavChanges.length) lines.push(`  ⚠ Cavity changes: ${cavChanges.length}`);
+          mGood += job.good; mReject += job.rejectPcs; mStops += job.stops.length; mStopMin += job.stopMinutes;
+          if(job.stopUnrecorded) mHasUnrecorded = true;
+        });
+
+        const ops = byMachineOp[m] || {};
+        const opNames = Object.keys(ops).sort((a,b)=>ops[b].good-ops[a].good);
+        if(opNames.length){
+          lines.push(`👷 *By Operator*`);
+          opNames.forEach(op=>{
+            const d = ops[op];
+            const achPct = (d.hasTarget && d.target>0) ? Math.round(d.good/d.target*100) : null;
+            const achLabel = achPct==null ? '' : ` — 🎯 ${achPct}% of target`;
+            lines.push(`  ${op} — ${d.good.toLocaleString()} good / ${d.reject.toLocaleString()} reject${achLabel}`);
+          });
+        }
+
+        const mPct = (mGood+mReject)>0 ? (mReject/(mGood+mReject)*100).toFixed(1) : '0.0';
+        lines.push(`📊 *Total*`);
+        lines.push(`✅ Good: ${mGood.toLocaleString()} pcs`);
+        lines.push(`❌ Reject: ${mReject.toLocaleString()} pcs (${mPct}%)`);
+        if(mStops) lines.push(`⏸ Stops: ${mStops} · Downtime: ${fmtDuration(mStopMin)}${mHasUnrecorded ? '+ (some not recorded)' : ''}`);
+        lines.push('');
+      });
+
+      document.getElementById('pr-sum-text').value = lines.join('\n');
+      emptyEl.style.display='none'; outWrap.style.display='';
+    }catch(e){
+      console.error(e);
+      emptyEl.textContent = 'Could not generate summary — ' + e.message;
+      emptyEl.style.display=''; outWrap.style.display='none';
+    }
+  }
+</script>
+</body>
+</html>
